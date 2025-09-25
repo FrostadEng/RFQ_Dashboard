@@ -2,8 +2,6 @@
 
 Project RFQ Tracker is a desktop application designed to scan a file system for project-related RFQ (Request for Quotation) documents, extract metadata, and display it in an easy-to-use dashboard. It consists of a Python-based file crawler and a PyQt6 graphical user interface.
 
-![Dashboard Screenshot](image.png)
-
 ## Features
 
 - **Automated Metadata Extraction:** The backend crawler scans project directories to find supplier transmissions and submissions.
@@ -20,17 +18,20 @@ Follow these instructions to get the RFQ Tracker running on your local machine.
 
 ### 1. Prerequisites
 
-Ensure you have the following system dependencies installed.
+#### For Windows 11
 
-**For Debian/Ubuntu-based systems:**
-```bash
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip libxcb-xinerama0 libxcb-cursor0
-```
+1.  **Python:** Install [Python 3.8+](https://www.python.org/downloads/windows/) from the official website. Make sure to check the box that says "Add Python to PATH" during installation.
+2.  **MongoDB:** Download and install [MongoDB Community Server](https://www.mongodb.com/try/download/community) using the MSI installer. Alternatively, you can use a [portable .zip version](https://www.mongodb.com/try/download/community) if you prefer not to install it system-wide.
+3.  **Git:** Install [Git for Windows](https://git-scm.com/download/win) to clone the repository.
 
-**For other systems (e.g., Windows, macOS):**
-- [Python 3.8+](https://www.python.org/downloads/)
-- A local or portable version of [MongoDB](https://www.mongodb.com/try/download/community).
+#### For Linux (Debian/Ubuntu)
+
+1.  **Python & System Libraries:**
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip libxcb-xinerama0 libxcb-cursor0
+    ```
+2.  **MongoDB:** Follow the official guide to [install MongoDB on Ubuntu](httpshttps://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/).
 
 ### 2. Installation
 
@@ -46,37 +47,34 @@ sudo apt-get install -y python3 python3-pip libxcb-xinerama0 libxcb-cursor0
 
 ### 3. Running the Application
 
-You will need to run two or three processes, ideally in separate terminal windows.
+You will need to run two or three processes, ideally in separate **Command Prompt** or **PowerShell** windows.
 
-**Terminal 1: Start the MongoDB Database**
+**Window 1: Start the MongoDB Database**
 
-If you are using a system-installed version of MongoDB, ensure the service is running:
-```bash
-sudo systemctl start mongod
-```
+If you installed MongoDB using the MSI installer, the database server should be running automatically as a Windows service. You can verify this by opening the "Services" app and looking for "MongoDB Server".
 
-If you are using a portable version of MongoDB (e.g., in a `vendor/` directory):
-```bash
+If you are using a portable version (e.g., in a `vendor/` directory):
+```powershell
 # Create a directory to store database files
-mkdir -p data
+mkdir data -Force
 
 # Start the server
-# (Adjust the path to your mongod executable)
-./vendor/mongodb/bin/mongod --dbpath ./data
+# (Adjust the path to your mongod.exe executable)
+.\vendor\mongodb\bin\mongod.exe --dbpath .\data
 ```
 
-**Terminal 2: Run the Crawler**
+**Window 2: Run the Crawler**
 
 This step scans the folders and populates the database. You only need to run this when you want to update the data.
-```bash
-python3 run_crawler.py
+```powershell
+python run_crawler.py
 ```
 
-**Terminal 3: Launch the Dashboard**
+**Window 3: Launch the Dashboard**
 
 Once the database is running, you can start the user interface.
-```bash
-python3 run_dashboard.py
+```powershell
+python run_dashboard.py
 ```
 
 The application window should now appear on your screen.
