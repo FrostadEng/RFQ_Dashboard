@@ -119,18 +119,6 @@ class RFQCrawler:
         logger.info(f"Found {len(receipts)} receipts in {received_folder}")
         return receipts
 
-    def process_supplier_folder(self, supplier_folder: Path,
-                              project_number: str) -> Dict[str, Any]:
-        """Process a single supplier folder."""
-        supplier_name = supplier_folder.name
-        logger.info(f"Processing supplier: {supplier_name} in project {project_number}")
-
-        supplier_doc = {"project_number": project_number, "supplier_name": supplier_name, "path": str(supplier_folder)}
-        transmissions = self.process_sent_folder(supplier_folder / "Sent", project_number, supplier_name)
-        receipts = self.process_received_folder(supplier_folder / "Received", project_number, supplier_name)
-
-        return {"supplier": supplier_doc, "transmissions": transmissions, "receipts": receipts}
-
     def process_project_folder(self, project_folder: Path) -> Dict[str, Any]:
         """Process a single project folder."""
         project_number = project_folder.name
@@ -144,13 +132,19 @@ class RFQCrawler:
 
         all_suppliers, all_transmissions, all_receipts = [], [], []
 
-        for rfq_folder in self.find_rfq_folders(project_folder):
-            for supplier_folder in rfq_folder.iterdir():
-                if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
-                    result = self.process_supplier_folder(supplier_folder, project_number)
-                    all_suppliers.append(result["supplier"])
-                    all_transmissions.extend(result["transmissions"])
-                    all_receipts.extend(result["receipts"])
+        # Define the structure to look for: RFQ/RFQ Customer/{Category}
+        rfq_customer_path = project_folder / "RFQ" / "RFQ Customer"
+        if rfq_customer_path.is_dir():
+            for category_folder in rfq_customer_path.iterdir():
+                if category_folder.is_dir() and category_folder.name in ["Fixtures", "Contractors"]:
+                    category = category_folder.name.rstrip('s') # "Fixtures" -> "Fixture"
+                    logger.info(f"Processing category: {category}")
+                    for supplier_folder in category_folder.iterdir():
+                        if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
+                            result = self.process_supplier_folder(supplier_folder, project_number, category)
+                            all_suppliers.append(result["supplier"])
+                            all_transmissions.extend(result["transmissions"])
+                            all_receipts.extend(result["receipts"])
 
         return {
             "project": project_doc,
@@ -158,6 +152,23 @@ class RFQCrawler:
             "transmissions": all_transmissions,
             "receipts": all_receipts
         }
+
+    def process_supplier_folder(self, supplier_folder: Path,
+                              project_number: str, category: str) -> Dict[str, Any]:
+        """Process a single supplier folder."""
+        supplier_name = supplier_folder.name
+        logger.info(f"Processing supplier: {supplier_name} in project {project_number}")
+
+        supplier_doc = {
+            "project_number": project_number,
+            "supplier_name": supplier_name,
+            "path": str(supplier_folder),
+            "category": category  # Add category to the supplier document
+        }
+        transmissions = self.process_sent_folder(supplier_folder / "Sent", project_number, supplier_name)
+        receipts = self.process_received_folder(supplier_folder / "Received", project_number, supplier_name)
+
+        return {"supplier": supplier_doc, "transmissions": transmissions, "receipts": receipts}
 
     def crawl(self):
         """Main crawling method."""
