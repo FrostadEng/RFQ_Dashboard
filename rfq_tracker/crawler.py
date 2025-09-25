@@ -1,100 +1,39 @@
-#!/usr/bin/env python3
 """
-RFQ Metadata Crawler
-Scans project directories for RFQ transmissions and stores metadata in MongoDB.
-
-This enhanced version uses an "upsert" strategy to avoid data loss during
-scans and supports flexible configuration via 'config.json'.
-
-Example config.json:
-{
-  "filter_tags": ["Template", "archive"],
-  "mongo_uri": "mongodb://localhost:27017",
-  "mongo_db": "rfq_tracker"
-}
+Core crawler logic for scanning RFQ metadata from project directories.
 """
 
-import os
 import sys
 import json
 import logging
-import argparse
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-import pymongo
-from pymongo import MongoClient, UpdateOne
+from typing import List, Dict, Any
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+from .db_manager import DBManager
+
 logger = logging.getLogger(__name__)
 
 
 class RFQCrawler:
     """Main crawler class for extracting RFQ metadata from project folders."""
 
-    def __init__(self, root_path: str, config_path: str = "config.json", dry_run: bool = False):
+    def __init__(self, config: Dict[str, Any], db_manager: DBManager, dry_run: bool = False):
         """
         Initialize the RFQ Crawler.
 
         Args:
-            root_path: Root directory to scan for projects.
-            config_path: Path to configuration file.
+            config: A dictionary containing configuration settings.
+            db_manager: An instance of DBManager to handle database operations.
             dry_run: If True, simulates a run without writing to the database.
         """
-        self.root_path = Path(root_path)
-        self.config = self._load_config(config_path)
-        self.filter_tags = self.config.get("filter_tags", ["Template", "archive"])
-        self.file_filter_tags = self.config.get("file_filter_tags", [".db", ".zip"])
-        self.mongo_uri = self.config.get("mongo_uri", "mongodb://localhost:27017")
-        self.mongo_db_name = self.config.get("mongo_db", "rfq_tracker")
-        self.db_client = None
-        self.db = None
+        self.root_path = Path(config.get("root_path", "."))
+        self.filter_tags = config.get("filter_tags", ["Template", "archive"])
+        self.file_filter_tags = config.get("file_filter_tags", [".db"])
+        self.db_manager = db_manager
         self.dry_run = dry_run
 
         # RFQ folder names to search for (case-insensitive)
         self.rfq_folder_names = ["RFQ", "Supplier RFQ", "Contractor"]
-
-    def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load configuration from JSON file."""
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
-                logger.info(f"Loaded configuration from {config_path}")
-                return config
-        except FileNotFoundError:
-            logger.warning(f"Config file '{config_path}' not found. Using defaults.")
-            return {}
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing config file: {e}. Using defaults.")
-            return {}
-
-    def connect_to_mongodb(self):
-        """Connect to MongoDB instance and ensure indexes exist."""
-        if self.dry_run:
-            logger.info("Dry run enabled. Skipping MongoDB connection.")
-            return
-        try:
-            self.db_client = MongoClient(self.mongo_uri)
-            self.db = self.db_client[self.mongo_db_name]
-
-            # Test connection
-            self.db_client.server_info()
-            logger.info(f"Successfully connected to MongoDB database '{self.mongo_db_name}'")
-
-            # Ensure indexes exist for efficient queries and upserts
-            self.db.projects.create_index("project_number", unique=True)
-            self.db.suppliers.create_index([("project_number", 1), ("supplier_name", 1)], unique=True)
-            self.db.transmissions.create_index("zip_path", unique=True)
-            self.db.receipts.create_index("received_folder_path", unique=True)
-            logger.info("Database indexes ensured.")
-
-        except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            sys.exit(1)
 
     def is_project_folder(self, folder_name: str) -> bool:
         """Check if folder name consists entirely of digits."""
@@ -220,64 +159,15 @@ class RFQCrawler:
             "receipts": all_receipts
         }
 
-    def save_to_mongodb(self, data: Dict[str, Any]):
-        """Save extracted data to MongoDB using an upsert strategy."""
-        if self.dry_run:
-            logger.info(f"Dry Run: Would upsert data for project {data['project']['project_number']}")
-            logger.info(f"Project: {json.dumps(data['project'], indent=2)}")
-            logger.info(f"Suppliers: {json.dumps(data['suppliers'], indent=2)}")
-            logger.info(f"Transmissions: {json.dumps(data['transmissions'], indent=2)}")
-            logger.info(f"Receipts: {json.dumps(data['receipts'], indent=2)}")
-            return
-
-        try:
-            # Upsert project
-            if data["project"]:
-                self.db.projects.replace_one(
-                    {"project_number": data["project"]["project_number"]},
-                    data["project"],
-                    upsert=True
-                )
-
-            # Bulk upsert suppliers
-            if data["suppliers"]:
-                requests = [
-                    UpdateOne(
-                        {"project_number": s["project_number"], "supplier_name": s["supplier_name"]},
-                        {"$set": s},
-                        upsert=True
-                    ) for s in data["suppliers"]
-                ]
-                self.db.suppliers.bulk_write(requests)
-
-            # Bulk upsert transmissions
-            if data["transmissions"]:
-                requests = [
-                    UpdateOne({"zip_path": t["zip_path"]}, {"$set": t}, upsert=True)
-                    for t in data["transmissions"]
-                ]
-                self.db.transmissions.bulk_write(requests)
-
-            # Bulk upsert receipts
-            if data["receipts"]:
-                requests = [
-                    UpdateOne({"received_folder_path": r["received_folder_path"]}, {"$set": r}, upsert=True)
-                    for r in data["receipts"]
-                ]
-                self.db.receipts.bulk_write(requests)
-
-            logger.info(f"Upserted data for project {data['project']['project_number']}")
-
-        except Exception as e:
-            logger.error(f"Error saving to MongoDB for project {data.get('project', {}).get('project_number')}: {e}")
-
     def crawl(self):
         """Main crawling method."""
         if not self.root_path.is_dir():
             logger.error(f"Root path is not a valid directory: {self.root_path}")
-            sys.exit(1)
+            return
 
-        self.connect_to_mongodb()
+        if not self.dry_run:
+            self.db_manager.connect()
+
         logger.info(f"Starting crawl from: {self.root_path}")
         logger.info(f"Folder filter tags: {self.filter_tags}")
         logger.info(f"File filter tags: {self.file_filter_tags}")
@@ -291,57 +181,17 @@ class RFQCrawler:
 
                 if self.is_project_folder(item.name):
                     project_data = self.process_project_folder(item)
-                    self.save_to_mongodb(project_data)
+                    if self.dry_run:
+                        logger.info(f"Dry Run: Would save data for project {project_data['project']['project_number']}")
+                        logger.info(f"Project: {json.dumps(project_data['project'], indent=2)}")
+                        logger.info(f"Suppliers: {json.dumps(project_data['suppliers'], indent=2)}")
+                        logger.info(f"Transmissions: {json.dumps(project_data['transmissions'], indent=2)}")
+                        logger.info(f"Receipts: {json.dumps(project_data['receipts'], indent=2)}")
+                    else:
+                        self.db_manager.save_project_data(project_data)
                     project_count += 1
 
         logger.info(f"Crawl complete. Processed {project_count} projects.")
 
-        if self.db_client:
-            self.db_client.close()
-
-
-def main():
-    """Main entry point with command-line argument parsing."""
-    parser = argparse.ArgumentParser(
-        description="RFQ Metadata Crawler for project directories.",
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-    parser.add_argument(
-        "root_path",
-        help="The root directory to scan for projects.\nExample: S:\\SADNA\\SGTAC\\Projects"
-    )
-    parser.add_argument(
-        "--config",
-        default="config.json",
-        help="Path to the JSON configuration file (default: config.json)"
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simulate a crawl without writing to the database."
-    )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose logging."
-    )
-    args = parser.parse_args()
-
-    if args.verbose:
-        logger.setLevel(logging.DEBUG)
-
-    crawler = RFQCrawler(args.root_path, config_path=args.config, dry_run=args.dry_run)
-
-    try:
-        crawler.crawl()
-        logger.info("Crawling completed successfully.")
-    except KeyboardInterrupt:
-        logger.info("Crawling interrupted by user.")
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during crawling: {e}", exc_info=True)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+        if not self.dry_run:
+            self.db_manager.close()
