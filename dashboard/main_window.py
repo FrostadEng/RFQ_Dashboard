@@ -2,13 +2,15 @@ import os
 import logging
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTreeView, QSplitter,
-                             QPushButton, QFrame, QScrollArea, QDateEdit, QCheckBox)
+                             QPushButton, QFrame, QScrollArea, QDateEdit,
+                             QCheckBox, QTabWidget)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 
 from rfq_tracker.db_manager import DBManager
 from .widgets.link_label import LinkLabel
 from .widgets.collapsible_widget import CollapsibleWidget
+from .ask_terence_widget import AskTerenceWidget
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +23,29 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1600, 900)
         self.setStyleSheet(self.get_stylesheet())
 
-        # Main layout is now a QSplitter
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.setCentralWidget(self.splitter)
+        # Create the main tab widget
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+
+        # Create the Project Tracker Tab
+        project_tracker_widget = self.create_project_tracker_tab()
+        self.tabs.addTab(project_tracker_widget, "Projects")
+
+        # Create the Ask Terence Tab
+        ask_terence_widget = AskTerenceWidget()
+        self.tabs.addTab(ask_terence_widget, "Ask Terence")
+
+        self.load_projects()
+
+    def create_project_tracker_tab(self) -> QWidget:
+        """Creates the main project tracking widget with sidebar and content area."""
+        project_tracker_widget = QWidget()
+        main_layout = QHBoxLayout(project_tracker_widget)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(splitter)
 
         sidebar = self.create_sidebar()
-        self.content_scroll_area = self.create_content_area()
-
-        self.splitter.addWidget(sidebar)
 
         # Create the main content area with a vertical layout
         main_content_widget = QWidget()
@@ -36,18 +53,19 @@ class MainWindow(QMainWindow):
         main_content_layout.setContentsMargins(0, 0, 0, 0)
         main_content_layout.setSpacing(0)
 
-        # Add the new persistent filter bar
+        # Add the persistent filter bar
         filter_bar = self.create_filter_bar()
         main_content_layout.addWidget(filter_bar)
 
-        # Add the scroll area for details below the filter bar
+        # Add the scroll area for details
         self.content_scroll_area = self.create_content_area()
         main_content_layout.addWidget(self.content_scroll_area)
 
-        self.splitter.addWidget(main_content_widget)
-        self.splitter.setSizes([300, 1300])
+        splitter.addWidget(sidebar)
+        splitter.addWidget(main_content_widget)
+        splitter.setSizes([300, 1300])
 
-        self.load_projects()
+        return project_tracker_widget
 
     def create_filter_bar(self) -> QWidget:
         """Creates the persistent top filter bar for the main content area."""
