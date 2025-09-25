@@ -1,18 +1,41 @@
 import os
 import logging
+import json
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTreeView, QSplitter,
                              QPushButton, QFrame, QScrollArea, QDateEdit,
-                             QCheckBox, QTabWidget)
-from PyQt6.QtCore import Qt, QDate
+                             QCheckBox, QTabWidget, QMessageBox)
+from PyQt6.QtCore import Qt, QDate, QThread, pyqtSignal
 from PyQt6.QtGui import QStandardItemModel, QStandardItem
 
 from rfq_tracker.db_manager import DBManager
+from rfq_tracker.crawler import RFQCrawler
 from .widgets.link_label import LinkLabel
 from .widgets.collapsible_widget import CollapsibleWidget
 from .ask_terence_widget import AskTerenceWidget
 
 logger = logging.getLogger(__name__)
+
+class CrawlerThread(QThread):
+    """
+    Runs the RFQ crawler in a separate thread to avoid freezing the UI.
+    """
+    finished = pyqtSignal(str)  # Signal to indicate completion, with an optional error message
+
+    def __init__(self, config, db_manager, dry_run=False):
+        super().__init__()
+        self.config = config
+        self.db_manager = db_manager
+        self.dry_run = dry_run
+
+    def run(self):
+        try:
+            crawler = RFQCrawler(config=self.config, db_manager=self.db_manager, dry_run=self.dry_run)
+            crawler.crawl()
+            self.finished.emit("")  # Success
+        except Exception as e:
+            logger.error(f"An error occurred during crawling: {e}", exc_info=True)
+            self.finished.emit(str(e)) # Failure
 
 class MainWindow(QMainWindow):
     def __init__(self, db_manager: DBManager = None, dry_run: bool = False):
@@ -180,6 +203,11 @@ class MainWindow(QMainWindow):
         self.search_bar.setPlaceholderText("Search Project or Supplier...")
         self.search_bar.textChanged.connect(self.filter_tree)
         sidebar_layout.addWidget(self.search_bar)
+
+        # Add Scan button
+        self.scan_button = QPushButton("Scan Files")
+        self.scan_button.clicked.connect(self.run_crawler)
+        sidebar_layout.addWidget(self.scan_button)
 
         self.tree_view = QTreeView()
         self.tree_model = QStandardItemModel()
@@ -414,6 +442,45 @@ class MainWindow(QMainWindow):
             child = self.content_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+
+    def load_config(self, config_path: str = "config.json") -> dict:
+        """Loads the application configuration from a JSON file."""
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"Error loading config file {config_path}: {e}")
+            QMessageBox.warning(self, "Configuration Error", f"Could not load or parse {config_path}.\nUsing default settings.")
+            return {}
+
+    def run_crawler(self):
+        """Initiates the file crawling process in a background thread."""
+        config = self.load_config()
+        if not config:
+            return # Stop if config is invalid
+
+        self.scan_button.setText("Scanning...")
+        self.scan_button.setEnabled(False)
+        self.tree_view.setEnabled(False) # Prevent interaction during scan
+
+        # Create and start the crawler thread
+        self.crawler_thread = CrawlerThread(config, self.db_manager, self.dry_run)
+        self.crawler_thread.finished.connect(self.on_crawler_finished)
+        self.crawler_thread.start()
+
+    def on_crawler_finished(self, error_message: str):
+        """Handles the completion of the crawler thread."""
+        self.scan_button.setText("Scan Files")
+        self.scan_button.setEnabled(True)
+        self.tree_view.setEnabled(True)
+
+        if error_message:
+            QMessageBox.critical(self, "Crawler Error", f"An error occurred during the scan:\n{error_message}")
+        else:
+            QMessageBox.information(self, "Scan Complete", "File scan completed successfully.")
+
+        # Refresh the project list
+        self.load_projects()
 
     def get_stylesheet(self) -> str:
         return """

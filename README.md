@@ -1,39 +1,28 @@
 # Project RFQ Tracker
 
-Project RFQ Tracker is a desktop application designed to scan a file system for project-related RFQ (Request for Quotation) documents, extract metadata, and display it in an easy-to-use dashboard. It consists of a Python-based file crawler and a PyQt6 graphical user interface.
+Project RFQ Tracker is a desktop application designed to scan a file system for project-related RFQ (Request for Quotation) documents, extract metadata, and display it in an easy-to-use dashboard. It is a self-contained application that manages its own database and dependencies.
 
 ## Features
 
 - **Automated Metadata Extraction:** The backend crawler scans project directories to find supplier transmissions and submissions.
-- **Data Persistence:** All extracted metadata is stored in a local MongoDB database, ensuring data is saved between sessions.
+- **Data Persistence:** All extracted metadata is stored in a local, portable MongoDB database, ensuring data is saved between sessions.
 - **Interactive Dashboard:** A clean, modern user interface built with PyQt6 allows for easy visualization and navigation of the project data.
+- **One-Click Scanning:** A "Scan Files" button in the UI triggers the crawler, eliminating the need for separate command-line operations.
 - **Search and Filtering:** Quickly find projects using the built-in search bar in the project list.
 - **Direct File Access:** Clickable links within the dashboard open the relevant file or folder directly in your system's file explorer.
 - **Configurable:** Key settings, such as the root directory to scan and database connection details, are managed in a simple `config.json` file.
-- **Modular Codebase:** The project is organized into separate packages for the backend crawler (`rfq_tracker`) and the frontend UI (`dashboard`), making it easy to maintain and extend.
+- **Standalone Application:** The application can be run with a single click, and it will automatically download and manage its own database engine (MongoDB).
 
 ## Getting Started
 
 Follow these instructions to get the RFQ Tracker running on your local machine.
 
-### 1. Prerequisites
+### Prerequisites
 
-#### For Windows 11
+- **Python:** Install [Python 3.8+](https://www.python.org/downloads/windows/) from the official website. Make sure to check the box that says "Add Python to PATH" during installation.
+- **Git:** Install [Git for Windows](https://git-scm.com/download/win) to clone the repository.
 
-1.  **Python:** Install [Python 3.8+](https://www.python.org/downloads/windows/) from the official website. Make sure to check the box that says "Add Python to PATH" during installation.
-2.  **MongoDB:** Download and install [MongoDB Community Server](https://www.mongodb.com/try/download/community) using the MSI installer. Alternatively, you can use a [portable .zip version](https://www.mongodb.com/try/download/community) if you prefer not to install it system-wide.
-3.  **Git:** Install [Git for Windows](https://git-scm.com/download/win) to clone the repository.
-
-#### For Linux (Debian/Ubuntu)
-
-1.  **Python & System Libraries:**
-    ```bash
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-pip libxcb-xinerama0 libxcb-cursor0
-    ```
-2.  **MongoDB:** Follow the official guide to [install MongoDB on Ubuntu](httpshttps://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/).
-
-### 2. Installation
+### Installation
 
 1.  **Clone the repository** (or download the source code).
 2.  **Navigate to the project's root directory** in your terminal.
@@ -42,42 +31,32 @@ Follow these instructions to get the RFQ Tracker running on your local machine.
     pip install -r requirements.txt
     ```
 4.  **Configure the application:**
-    - Rename `config.example.json` to `config.json` (if applicable).
-    - Edit `config.json` to set the `root_path` to the directory you want to scan.
+    - Edit `config.json` to set the `root_path` to the directory you want to scan. The included `mock_projects` can be used for testing.
 
-### 3. Running the Application
+### Running the Application
 
-You will need to run two or three processes, ideally in separate **Command Prompt** or **PowerShell** windows.
+Once the dependencies are installed, you can run the application with a single command:
 
-**Window 1: Start the MongoDB Database**
-
-If you installed MongoDB using the MSI installer, the database server should be running automatically as a Windows service. You can verify this by opening the "Services" app and looking for "MongoDB Server".
-
-If you are using a portable version (e.g., in a `vendor/` directory):
-```powershell
-# Create a directory to store database files
-mkdir data -Force
-
-# Start the server
-# (Adjust the path to your mongod.exe executable)
-.\vendor\mongodb\bin\mongod.exe --dbpath .\data
+```bash
+python main.py
 ```
 
-**Window 2: Run the Crawler**
+The first time you run the application, it will download a portable version of MongoDB, which may take a few minutes. This is a one-time setup. The application window should then appear on your screen.
 
-This step scans the folders and populates the database. You only need to run this when you want to update the data.
-```powershell
-python run_crawler.py
-```
+## Building a Distributable Version
 
-**Window 3: Launch the Dashboard**
+You can create a standalone, distributable version of the application that can be run on other Windows machines without needing to install Python or any dependencies.
 
-Once the database is running, you can start the user interface.
-```powershell
-python run_dashboard.py
-```
-
-The application window should now appear on your screen.
+1.  **Install PyInstaller:**
+    ```bash
+    pip install pyinstaller
+    ```
+2.  **Run the build script:**
+    ```bash
+    python build.py
+    ```
+3.  **Find the application:**
+    - The bundled application will be located in the `dist/RFQ-Tracker` directory. You can zip this directory and share it with others.
 
 ## Configuration
 
@@ -95,12 +74,6 @@ All runtime settings are managed in the `config.json` file:
 
 - `filter_tags`: A list of case-insensitive strings. Any folder containing one of these strings will be skipped by the crawler.
 - `file_filter_tags`: A list of file extensions. Any file with one of these extensions will be ignored.
-- `mongo_uri`: The connection string for your MongoDB instance.
+- `mongo_uri`: The connection string for your MongoDB instance. This should be left as the default unless you are using your own MongoDB server.
 - `mongo_db`: The name of the database to use.
-- `root_path`: The absolute or relative path to the root directory containing your project folders. The included `mock_projects` can be used for testing.
-
-## Application Flow
-
-The following diagram illustrates the general workflow of the application, from running the crawler to interacting with the dashboard.
-
-<img width="1078" height="998" alt="image" src="https://github.com/user-attachments/assets/724ae04d-9115-4677-9568-b3d546192736" />
+- `root_path`: The absolute or relative path to the root directory containing your project folders.
