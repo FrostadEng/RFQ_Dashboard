@@ -98,3 +98,9 @@ All runtime settings are managed in the `config.json` file:
 - `mongo_uri`: The connection string for your MongoDB instance.
 - `mongo_db`: The name of the database to use.
 - `root_path`: The absolute or relative path to the root directory containing your project folders. The included `mock_projects` can be used for testing.
+
+## Application Flow
+
+The following diagram illustrates the general workflow of the application, from running the crawler to interacting with the dashboard.
+
+<img width="1078" height="998" alt="image" src="https://github.com/user-attachments/assets/217469d5-8c9b-4675-87ea-f68c5a3c9713" />
