@@ -40,7 +40,7 @@ class DBManager:
         Save all extracted data for a single project using an upsert strategy.
         This includes project details, suppliers, transmissions, and receipts.
         """
-        if not self.db:
+        if self.db is None:
             logger.error("Database not connected. Cannot save data.")
             return
 

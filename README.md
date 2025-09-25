@@ -103,4 +103,39 @@ All runtime settings are managed in the `config.json` file:
 
 The following diagram illustrates the general workflow of the application, from running the crawler to interacting with the dashboard.
 
-<img width="1078" height="998" alt="image" src="https://github.com/user-attachments/assets/217469d5-8c9b-4675-87ea-f68c5a3c9713" />
+```plantuml
+@startuml
+!theme materia
+
+actor User
+
+box "Backend Process" #LightBlue
+    participant "run_crawler.py" as Crawler
+    participant "File System" as FS
+    participant "MongoDB" as DB
+end box
+
+box "Frontend Process" #LightGreen
+    participant "run_dashboard.py" as Dashboard
+end box
+
+User -> Crawler : Executes
+Crawler -> FS : Scans project folders
+FS --> Crawler : Returns file metadata
+Crawler -> DB : Upserts project data
+DB --> Crawler : Confirms write
+
+User -> Dashboard : Launches
+Dashboard -> DB : Queries for projects
+DB --> Dashboard : Returns project list
+Dashboard -> User : Displays project list
+
+User -> Dashboard : Selects a project
+Dashboard -> DB : Queries for supplier details
+DB --> Dashboard : Returns supplier data
+Dashboard -> User : Displays supplier details
+
+User -> Dashboard : Clicks file link
+Dashboard -> FS : Opens file location
+@enduml
+```
