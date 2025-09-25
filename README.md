@@ -98,3 +98,44 @@ All runtime settings are managed in the `config.json` file:
 - `mongo_uri`: The connection string for your MongoDB instance.
 - `mongo_db`: The name of the database to use.
 - `root_path`: The absolute or relative path to the root directory containing your project folders. The included `mock_projects` can be used for testing.
+
+## Application Flow
+
+The following diagram illustrates the general workflow of the application, from running the crawler to interacting with the dashboard.
+
+```plantuml
+@startuml
+!theme materia
+
+actor User
+
+box "Backend Process" #LightBlue
+    participant "run_crawler.py" as Crawler
+    participant "File System" as FS
+    participant "MongoDB" as DB
+end box
+
+box "Frontend Process" #LightGreen
+    participant "run_dashboard.py" as Dashboard
+end box
+
+User -> Crawler : Executes
+Crawler -> FS : Scans project folders
+FS --> Crawler : Returns file metadata
+Crawler -> DB : Upserts project data
+DB --> Crawler : Confirms write
+
+User -> Dashboard : Launches
+Dashboard -> DB : Queries for projects
+DB --> Dashboard : Returns project list
+Dashboard -> User : Displays project list
+
+User -> Dashboard : Selects a project
+Dashboard -> DB : Queries for supplier details
+DB --> Dashboard : Returns supplier data
+Dashboard -> User : Displays supplier details
+
+User -> Dashboard : Clicks file link
+Dashboard -> FS : Opens file location
+@enduml
+```
