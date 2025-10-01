@@ -92,17 +92,15 @@ def fetch_supplier_data(_db_manager: DBManager, project_number: str) -> List[Dic
         for supplier in suppliers:
             supplier_name = supplier['supplier_name']
 
-            # Fetch transmissions sorted by sent_date descending (newest first)
-            transmissions = list(_db_manager.db.transmissions.find({
+            # Fetch all submissions for this supplier, sorted by date descending (newest first)
+            submissions = list(_db_manager.db.submissions.find({
                 "project_number": project_number,
                 "supplier_name": supplier_name
-            }).sort("sent_date", -1))
+            }).sort("date", -1))
 
-            # Fetch receipts sorted by received_date descending (newest first)
-            receipts = list(_db_manager.db.receipts.find({
-                "project_number": project_number,
-                "supplier_name": supplier_name
-            }).sort("received_date", -1))
+            # Separate into sent and received
+            transmissions = [s for s in submissions if s.get('type') == 'sent']
+            receipts = [s for s in submissions if s.get('type') == 'received']
 
             supplier_data.append({
                 'supplier': supplier,
@@ -402,23 +400,17 @@ def main():
     if st.session_state.selected_project:
         project = st.session_state.selected_project
 
-        st.subheader(f"Project {project['project_number']}")
+        # Display project details with clickable project number
+        project_path = project.get('path', '')
+        project_link = create_file_link(project_path, f"Project {project['project_number']}")
+        st.markdown(f"## {project_link}")
 
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.metric("Project Number", project['project_number'])
-
-        with col2:
-            if 'last_scanned' in project and project['last_scanned']:
-                formatted_date = format_timestamp(project['last_scanned'])
-                st.metric("Last Scanned", formatted_date)
-            else:
-                st.metric("Last Scanned", "Not available")
-
-        st.divider()
-
-        st.info("**Path:** " + project.get('path', 'N/A'))
+        # Display last scanned date
+        if 'last_scanned' in project and project['last_scanned']:
+            formatted_date = format_timestamp(project['last_scanned'])
+            st.caption(f"📅 Last Scanned: {formatted_date}")
+        else:
+            st.caption("📅 Last Scanned: Not available")
 
         st.divider()
 
@@ -451,50 +443,64 @@ def main():
                             st.caption("_No transmissions found_")
                         else:
                             for trans_idx, trans in enumerate(transmissions):
-                                st.markdown(f"**📦 {trans['zip_name']}**")
+                                folder_name = trans.get('folder_name', 'Unknown')
+                                st.markdown(f"**📂 {folder_name}**")
 
                                 # Display metadata
-                                sent_date = format_timestamp(trans.get('sent_date', 'N/A'))
-                                st.caption(f"📅 Sent: {sent_date}")
+                                sent_date = format_timestamp(trans.get('date', 'N/A'))
+                                st.caption(f"📅 Date: {sent_date}")
 
-                                source_files = trans.get('source_files', [])
-                                st.caption(f"📁 Source files: {len(source_files)} files")
+                                files = trans.get('files', [])
+                                st.caption(f"📁 Files: {len(files)} total")
 
-                                # File access for ZIP
-                                col_link, col_dl = st.columns([1, 1])
-                                with col_link:
-                                    zip_link = create_file_link(trans['zip_path'], "🔗 Open ZIP")
-                                    st.markdown(zip_link)
-                                with col_dl:
-                                    create_download_button(
-                                        trans['zip_path'],
-                                        "⬇️ Download ZIP",
-                                        key_suffix=f"zip_{supplier['supplier_name']}_{trans_idx}"
-                                    )
+                                # Build and render folder tree (same as receipts)
+                                if files:
+                                    # Pagination for large file lists
+                                    if len(files) > 100:
+                                        items_per_page = 50
+                                        total_pages = (len(files) + items_per_page - 1) // items_per_page
 
-                                # Source files expander (show first 20, indicate more)
-                                if source_files:
-                                    display_limit = 20
-                                    if len(source_files) > display_limit:
-                                        expander_label = f"View source files ({len(source_files)} files, showing first {display_limit})"
+                                        page = st.number_input(
+                                            f"Page",
+                                            min_value=1,
+                                            max_value=total_pages,
+                                            value=1,
+                                            key=f"page_sent_{supplier['supplier_name']}_{trans_idx}"
+                                        )
+
+                                        start_idx = (page - 1) * items_per_page
+                                        end_idx = start_idx + items_per_page
+                                        st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(files))} of {len(files)} files")
+                                        files_to_display = files[start_idx:end_idx]
                                     else:
-                                        expander_label = f"View source files ({len(source_files)} files)"
+                                        files_to_display = files
 
-                                    with st.expander(expander_label):
-                                        for file_idx, source_file in enumerate(source_files[:display_limit]):
-                                            file_col1, file_col2 = st.columns([3, 1])
-                                            with file_col1:
-                                                file_link = create_file_link(source_file, Path(source_file).name)
-                                                st.markdown(f"📄 {file_link}")
-                                            with file_col2:
-                                                create_download_button(
-                                                    source_file,
-                                                    "⬇️",
-                                                    key_suffix=f"src_{supplier['supplier_name']}_{trans_idx}_{file_idx}"
-                                                )
+                                    # Build folder tree
+                                    try:
+                                        tree = build_folder_tree(files_to_display, trans.get('folder_path', ''))
 
-                                        if len(source_files) > display_limit:
-                                            st.caption(f"... and {len(source_files) - display_limit} more files")
+                                        with st.expander("📁 Folder Structure", expanded=True):
+                                            render_folder_tree(
+                                                tree,
+                                                key_prefix=f"tree_sent_{supplier['supplier_name']}_{trans_idx}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(f"Error rendering folder tree for transmission: {e}")
+                                        st.error(f"Error displaying folder structure: {str(e)[:100]}")
+
+                                        # Fallback: flat file list
+                                        with st.expander(f"📄 Files ({len(files_to_display)} items)"):
+                                            for file_idx, file_path in enumerate(files_to_display):
+                                                col1, col2 = st.columns([3, 1])
+                                                with col1:
+                                                    link = create_file_link(file_path, Path(file_path).name)
+                                                    st.markdown(f"📄 {link}")
+                                                with col2:
+                                                    create_download_button(
+                                                        file_path,
+                                                        "⬇️",
+                                                        key_suffix=f"flat_sent_{supplier['supplier_name']}_{trans_idx}_{file_idx}"
+                                                    )
 
                                 st.divider()
 
@@ -506,14 +512,14 @@ def main():
                             st.caption("_No submissions received_")
                         else:
                             for receipt_idx, receipt in enumerate(receipts):
-                                folder_name = Path(receipt['received_folder_path']).name
+                                folder_name = receipt.get('folder_name', 'Unknown')
                                 st.markdown(f"**📂 {folder_name}**")
 
                                 # Display metadata
-                                received_date = format_timestamp(receipt.get('received_date', 'N/A'))
-                                st.caption(f"📅 Received: {received_date}")
+                                received_date = format_timestamp(receipt.get('date', 'N/A'))
+                                st.caption(f"📅 Date: {received_date}")
 
-                                received_files = receipt.get('received_files', [])
+                                received_files = receipt.get('files', [])
                                 st.caption(f"📁 Files: {len(received_files)} total")
 
                                 # Build and render folder tree
@@ -541,7 +547,7 @@ def main():
 
                                     # Build folder tree
                                     try:
-                                        tree = build_folder_tree(files_to_display, receipt['received_folder_path'])
+                                        tree = build_folder_tree(files_to_display, receipt.get('folder_path', ''))
 
                                         # Render tree with expander for large structures
                                         with st.expander("📁 Folder Structure", expanded=True):

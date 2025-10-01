@@ -4,6 +4,7 @@ port = 8501
 
 [theme]
 primaryColor = "#3498db"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f0f2f6"
-textColor = "#262730"
+backgroundColor = "#0e1117"           # Dark background
+secondaryBackgroundColor = "#262730"  # Slightly lighter dark
+textColor = "#fafafa"                 # Light text
+base = "dark"                         # Set dark as base theme

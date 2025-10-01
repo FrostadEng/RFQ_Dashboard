@@ -70,54 +70,50 @@ class RFQCrawler:
             logger.error(f"Error getting timestamp for {file_path}: {e}")
             return datetime.now(timezone.utc).isoformat()
 
-    def process_sent_folder(self, sent_folder: Path, project_number: str,
-                          supplier_name: str) -> List[Dict[str, Any]]:
-        """Process Sent folder to extract transmission metadata."""
-        transmissions = []
-        if not sent_folder.exists():
-            return transmissions
+    def process_submission_folder(self, folder_path: Path, project_number: str,
+                                  supplier_name: str, folder_type: str) -> List[Dict[str, Any]]:
+        """
+        Process a submission folder (Sent or Received) to extract metadata.
 
-        for zip_file in sent_folder.glob("*.zip"):
-            transmission = {
-                "project_number": project_number,
-                "supplier_name": supplier_name,
-                "zip_name": zip_file.name,
-                "zip_path": str(zip_file),
-                "sent_date": self.get_file_creation_time(zip_file),
-                "source_files": []
-            }
+        Args:
+            folder_path: Path to Sent or Received folder
+            project_number: Project number
+            supplier_name: Supplier name
+            folder_type: "sent" or "received"
 
-            source_folder = sent_folder / zip_file.stem
-            if source_folder.is_dir():
-                transmission["source_files"] = [str(f) for f in source_folder.rglob("*") if f.is_file()]
-                logger.debug(f"Found {len(transmission['source_files'])} source files for {zip_file.name}")
+        Returns:
+            List of submission dictionaries
+        """
+        submissions = []
 
-            transmissions.append(transmission)
+        if not folder_path.exists():
+            return submissions
 
-        logger.info(f"Found {len(transmissions)} transmissions in {sent_folder}")
-        return transmissions
+        # Iterate through submission folders
+        for submission_folder in folder_path.iterdir():
+            if submission_folder.is_dir():
+                # Skip filtered folders
+                if self.should_skip_folder(submission_folder.name):
+                    continue
 
-    def process_received_folder(self, received_folder: Path, project_number: str,
-                              supplier_name: str) -> List[Dict[str, Any]]:
-        """Process Received folder to extract receipt metadata."""
-        receipts = []
-        if not received_folder.exists():
-            return receipts
-
-        for receipt_folder in received_folder.iterdir():
-            if receipt_folder.is_dir():
-                receipt = {
+                submission = {
                     "project_number": project_number,
                     "supplier_name": supplier_name,
-                    "received_folder_path": str(receipt_folder),
-                    "received_date": self.get_file_creation_time(receipt_folder),
-                    "received_files": [str(f) for f in receipt_folder.rglob("*") if f.is_file() and not self.should_skip_file(f.name)]
+                    "type": folder_type,  # "sent" or "received"
+                    "folder_name": submission_folder.name,
+                    "folder_path": str(submission_folder),
+                    "date": self.get_file_creation_time(submission_folder),
+                    "files": [
+                        str(f) for f in submission_folder.rglob("*")
+                        if f.is_file() and not self.should_skip_file(f.name)
+                    ]
                 }
-                receipts.append(receipt)
-                logger.debug(f"Found {len(receipt['received_files'])} files in receipt {receipt_folder.name}")
 
-        logger.info(f"Found {len(receipts)} receipts in {received_folder}")
-        return receipts
+                submissions.append(submission)
+                logger.debug(f"Found {len(submission['files'])} files in {folder_type} folder {submission_folder.name}")
+
+        logger.info(f"Found {len(submissions)} {folder_type} submissions in {folder_path}")
+        return submissions
 
     def process_supplier_folder(self, supplier_folder: Path,
                               project_number: str) -> Dict[str, Any]:
@@ -125,11 +121,28 @@ class RFQCrawler:
         supplier_name = supplier_folder.name
         logger.info(f"Processing supplier: {supplier_name} in project {project_number}")
 
-        supplier_doc = {"project_number": project_number, "supplier_name": supplier_name, "path": str(supplier_folder)}
-        transmissions = self.process_sent_folder(supplier_folder / "Sent", project_number, supplier_name)
-        receipts = self.process_received_folder(supplier_folder / "Received", project_number, supplier_name)
+        supplier_doc = {
+            "project_number": project_number,
+            "supplier_name": supplier_name,
+            "path": str(supplier_folder)
+        }
 
-        return {"supplier": supplier_doc, "transmissions": transmissions, "receipts": receipts}
+        # Process Sent and Received folders identically
+        sent_submissions = self.process_submission_folder(
+            supplier_folder / "Sent", project_number, supplier_name, "sent"
+        )
+
+        received_submissions = self.process_submission_folder(
+            supplier_folder / "Received", project_number, supplier_name, "received"
+        )
+
+        # Combine into single submissions list
+        all_submissions = sent_submissions + received_submissions
+
+        return {
+            "supplier": supplier_doc,
+            "submissions": all_submissions  # Single list instead of separate transmissions/receipts
+        }
 
     def process_project_folder(self, project_folder: Path) -> Dict[str, Any]:
         """Process a single project folder."""
@@ -142,21 +155,19 @@ class RFQCrawler:
             "last_scanned": datetime.now(timezone.utc).isoformat()
         }
 
-        all_suppliers, all_transmissions, all_receipts = [], [], []
+        all_suppliers, all_submissions = [], []
 
         for rfq_folder in self.find_rfq_folders(project_folder):
             for supplier_folder in rfq_folder.iterdir():
                 if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
                     result = self.process_supplier_folder(supplier_folder, project_number)
                     all_suppliers.append(result["supplier"])
-                    all_transmissions.extend(result["transmissions"])
-                    all_receipts.extend(result["receipts"])
+                    all_submissions.extend(result["submissions"])
 
         return {
             "project": project_doc,
             "suppliers": all_suppliers,
-            "transmissions": all_transmissions,
-            "receipts": all_receipts
+            "submissions": all_submissions
         }
 
     def crawl(self):
