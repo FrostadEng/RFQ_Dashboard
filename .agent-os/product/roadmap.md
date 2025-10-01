@@ -91,7 +91,7 @@ The following features have been fully implemented and tested in the PyQt6 deskt
   - [x] Dual access method (open + download)
 
 - [ ] **UI/UX Enhancements**
-  - [ ] Custom CSS for dark theme (match PyQt6 aesthetic)
+  - [x] Custom CSS for dark theme (match PyQt6 aesthetic) ✅ Completed 2025-09-30
   - [ ] Responsive design for various screen sizes
   - [x] Loading indicators for database queries (via @st.cache_data)
   - [x] Error handling with user-friendly messages
