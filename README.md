@@ -15,9 +15,58 @@ Project RFQ Tracker is a web-based application designed to scan a file system fo
 - **Configurable:** Key settings, such as the root directory to scan and database connection details, are managed in a simple `config.json` file.
 - **Modular Codebase:** The project is organized into separate packages for the backend crawler (`rfq_tracker`) and the frontend UI, making it easy to maintain and extend.
 
-## Getting Started
+## Running with Docker (Recommended)
 
-Follow these instructions to get the RFQ Tracker running on your local machine.
+The easiest way to run the RFQ Tracker is by using Docker. This method bundles the application and its dependencies into isolated containers, so you don't need to install Python or MongoDB on your host machine.
+
+### Prerequisites
+
+- **Docker:** Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows or macOS, or [Docker Engine](https://docs.docker.com/engine/install/) for Linux.
+
+### 1. Configure the Application
+
+Before launching the containers, you need to configure the `root_path` in `config.json`. This is the directory on your host machine that contains the project folders you want to scan.
+
+1.  Open the `config.json` file.
+2.  Set the `root_path` to the absolute or relative path of your projects directory (e.g., `"C:/Users/YourUser/Documents/Projects"` or `"../my_projects"`).
+
+    **Note:** The `mongo_uri` and `mongo_db` settings in this file will be overridden by the `docker-compose.yml` file when running in a container, but the `root_path` is still read from here.
+
+### 2. Launch the Application
+
+Navigate to the project's root directory in your terminal and run the following command:
+
+```bash
+sudo docker compose up --build
+```
+
+- `--build`: This flag tells Docker to build the application image from the `Dockerfile` the first time you run it or if any changes have been made to the application code.
+- You may not need `sudo` depending on your Docker setup on Linux.
+
+Docker will now:
+1.  Pull the `mongo:7.0` image.
+2.  Build the `rfq-tracker-app` image.
+3.  Create and start the `mongodb` and `app` containers.
+
+### 3. Access the Dashboard
+
+Once the containers are running, you can access the dashboard in your web browser at:
+
+**`http://localhost:8501`**
+
+The first time you launch the dashboard, it will automatically run the crawler to scan your `root_path` and populate the database. This may take a few minutes. Subsequent startups will be faster. You can trigger a manual refresh at any time using the "Refresh Data" button in the sidebar.
+
+### 4. Stopping the Application
+
+To stop the containers, press `Ctrl+C` in the terminal where `docker compose` is running, or run the following command from another terminal in the same directory:
+
+```bash
+sudo docker compose down
+```
+
+## Manual Installation
+
+Follow these instructions to get the RFQ Tracker running on your local machine without Docker.
 
 ### 1. Prerequisites
 
