@@ -1,16 +1,19 @@
 # Project RFQ Tracker
 
-Project RFQ Tracker is a desktop application designed to scan a file system for project-related RFQ (Request for Quotation) documents, extract metadata, and display it in an easy-to-use dashboard. It consists of a Python-based file crawler and a PyQt6 graphical user interface.
+Project RFQ Tracker is a web-based application designed to scan a file system for project-related RFQ (Request for Quotation) documents, extract metadata, and display it in an easy-to-use dashboard accessible from any browser on your local network. It consists of a Python-based file crawler and a Streamlit web interface.
+
+> **Note:** The legacy PyQt6 desktop version is still available via `run_dashboard.py`, but the recommended interface is the new Streamlit web dashboard.
 
 ## Features
 
 - **Automated Metadata Extraction:** The backend crawler scans project directories to find supplier transmissions and submissions.
 - **Data Persistence:** All extracted metadata is stored in a local MongoDB database, ensuring data is saved between sessions.
-- **Interactive Dashboard:** A clean, modern user interface built with PyQt6 allows for easy visualization and navigation of the project data.
-- **Search and Filtering:** Quickly find projects using the built-in search bar in the project list.
-- **Direct File Access:** Clickable links within the dashboard open the relevant file or folder directly in your system's file explorer.
+- **Web-Based Dashboard:** A clean, modern user interface built with Streamlit, accessible from any browser on your local network.
+- **Network Accessibility:** Install on one work computer and access from any workstation via `http://<server-ip>:8501`.
+- **Real-Time Search and Filtering:** Instantly find projects using the built-in search bar.
+- **Flexible Sorting:** Sort projects by number or last scanned date.
 - **Configurable:** Key settings, such as the root directory to scan and database connection details, are managed in a simple `config.json` file.
-- **Modular Codebase:** The project is organized into separate packages for the backend crawler (`rfq_tracker`) and the frontend UI (`dashboard`), making it easy to maintain and extend.
+- **Modular Codebase:** The project is organized into separate packages for the backend crawler (`rfq_tracker`) and the frontend UI, making it easy to maintain and extend.
 
 ## Getting Started
 
@@ -70,14 +73,87 @@ This step scans the folders and populates the database. You only need to run thi
 python run_crawler.py
 ```
 
-**Window 3: Launch the Dashboard**
+**Window 3: Launch the Web Dashboard**
 
-Once the database is running, you can start the user interface.
+Once the database is running, you can start the web interface.
+```powershell
+streamlit run streamlit_dashboard.py
+```
+
+The dashboard will start and display a URL. By default, it's accessible at `http://localhost:8501` on the server computer.
+
+### 4. Network Access (Team Collaboration)
+
+To make the dashboard accessible to your entire team on the local network:
+
+**Step 1: Find Your Server Computer's IP Address**
+
+On the computer running the dashboard:
+
+- **Windows:** Open Command Prompt and run:
+  ```cmd
+  ipconfig
+  ```
+  Look for "IPv4 Address" under your active network adapter (usually starts with `192.168.x.x` or `10.x.x.x`)
+
+- **Linux:** Open Terminal and run:
+  ```bash
+  ip addr show
+  ```
+  Look for `inet` address under your active network interface
+
+**Step 2: Configure Firewall (Windows)**
+
+Allow incoming connections on port 8501:
+
+1. Open Windows Defender Firewall with Advanced Security
+2. Click "Inbound Rules" → "New Rule"
+3. Select "Port" → Click Next
+4. Select "TCP" and enter port `8501` → Click Next
+5. Select "Allow the connection" → Click Next
+6. Apply to Domain, Private, and Public → Click Next
+7. Name it "Streamlit RFQ Dashboard" → Click Finish
+
+**Linux (UFW):**
+```bash
+sudo ufw allow 8501
+```
+
+**Step 3: Start Dashboard with Network Access**
+
+The dashboard is already configured to bind to all network interfaces (see `.streamlit/config.toml`). Simply run:
+
+```powershell
+streamlit run streamlit_dashboard.py
+```
+
+**Step 4: Share the URL with Your Team**
+
+Team members can access the dashboard by navigating to:
+```
+http://<server-ip>:8501
+```
+
+Replace `<server-ip>` with the IP address you found in Step 1 (e.g., `http://192.168.1.100:8501`).
+
+**Example:**
+- Server computer IP: `192.168.1.100`
+- Team access URL: `http://192.168.1.100:8501`
+
+**Troubleshooting Network Access:**
+- Verify both computers are on the same network
+- Check firewall settings on the server computer
+- Ensure MongoDB and Streamlit are both running on the server
+- Try accessing `http://localhost:8501` from the server computer first to verify it works locally
+
+### 5. Legacy Desktop Application
+
+The original PyQt6 desktop application is still available:
 ```powershell
 python run_dashboard.py
 ```
 
-The application window should now appear on your screen.
+This runs locally on your machine and does not require network configuration.
 
 ## Configuration
 

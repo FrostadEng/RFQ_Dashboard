@@ -1,52 +1,68 @@
-# Tech Stack - FactorySim Core SDK
+# RFQ Tracker: Technology Stack
 
-## Context
+This document outlines the technology stack for the Project RFQ Tracker application.
 
-This document outlines the technology stack for **FactorySim Core**, a Python-native SDK for designing and running high-fidelity manufacturing simulations. This stack is designed for a local, engineer-focused tool, prioritizing performance, ease of use, and code quality over web or multi-user infrastructure.
+## 1. Backend
 
----
+- **Language:** Python 3.12
+- **Core Logic:** The backend consists of a crawler script responsible for scanning the file system, extracting metadata from project folders, and storing it in the database. The main logic is contained within the `rfq_tracker` package.
+- **Database Connector:** `pymongo[srv]` is used as the client library to interact with the MongoDB database.
+- **Virtual Environment:** `.venv/` for dependency isolation
 
-## 1. Core Engine & Language
+## 2. Frontend
 
-This is the foundation of the SDK, responsible for all simulation and rendering.
+- **Current:** PyQt6 (desktop application)
+- **Target:** Streamlit (web-based dashboard)
+- **Description:** The user interface is transitioning from PyQt6 desktop to a web-based dashboard built using Streamlit. This will provide browser-based access for the entire team, solving deployment challenges and enabling remote access.
 
--   **Primary Language:** **Python 3.12+**
-    -   *Why:* The required language for the Genesis engine and the standard for data analysis and scripting in the engineering world.
--   **Core Simulation & Rendering Engine:** **Genesis-Embodied-AI/Genesis**
-    -   *Why:* This is the heart of the tool. It provides the GPU-accelerated physics, collision detection, and photorealistic rendering that makes high-fidelity simulation possible. The SDK acts as a high-level command layer on top of Genesis.
+## 3. Database
 
-## 2. Data & Configuration Formats
+- **System:** MongoDB
+- **Current Setup:** Local MongoDB instance (`mongodb://localhost:27017`)
+- **Target Setup:** Dockerized MongoDB container for portability
+- **Schema:** Collections for projects, suppliers, transmissions, and receipts with proper indexing
+- **Description:** A NoSQL database used to persist all metadata extracted by the crawler. The database will be configured to run in a Docker container, making the entire application portable and easy to deploy.
 
-This defines how users will configure simulations and consume the results. There is no database.
+## 4. Deployment
 
--   **Configuration Format:** **YAML**
-    -   *Why:* Human-readable and perfect for defining the hierarchical structure of a manufacturing cell (robots, fixtures, parts). It's easy to edit and can be version-controlled with Git.
-    -   *Key Dependency:* `PyYAML`
--   **Data Output Format:** **Pandas DataFrames** (exported to **Parquet** or **CSV**)
-    -   *Why:* Pandas is the standard for data analysis in Python. Exporting results (cycle times, wait times, etc.) to Parquet is highly efficient for large datasets, while CSV provides easy interoperability.
-    -   *Key Dependencies:* `pandas`, `pyarrow`
+- **Current:** Manual Python script execution with local MongoDB
+- **Target:** Docker + Docker Compose for containerized deployment
+- **Components:**
+  - Streamlit app container
+  - MongoDB container
+  - Volume persistence for database
+  - Network configuration for inter-container communication
 
-## 3. Python Development & Quality Assurance
+## 5. Configuration & Execution
 
-This defines the standards and tools used to build a robust, high-quality Python library.
+- **Configuration:** Application settings, such as database URI, file paths to scan, and directory/file filters, are managed in a `config.json` file.
+- **Planned:** Environment variable support via `.env` files for Docker deployments
+- **Execution:** The application will have two main entry points:
+    - `run_crawler.py`: To execute the file system scan and populate the database.
+    - `run_dashboard.py`: To launch the user interface (currently PyQt6, migrating to Streamlit).
 
--   **Virtual Environment:** **venv**
--   **Package Manager:** **pip** with `requirements.txt` or `pyproject.toml`
--   **Code Formatting:** **Black**
-    -   *Why:* Enforces a single, consistent code style, eliminating all arguments about formatting.
--   **Import Sorting:** **isort** (or handled by Ruff)
--   **Type Checking:** **mypy**
-    -   *Why:* Catches a huge class of bugs before runtime and provides excellent auto-completion for users of the SDK.
--   **Testing Framework:** **pytest**
-    -   *Why:* The standard for writing clean, scalable tests in Python. Essential for validating the simulation logic.
--   **Linting:** **Ruff**
-    -   *Why:* An extremely fast, all-in-one linter that enforces best practices and helps write clean, idiomatic Python.
+## 6. Dependencies
 
-## 4. Development Environment & CI/CD
+**Current (`requirements.txt`):**
+- **`pymongo[srv]`**: For MongoDB connectivity
+- **`PyQt6`**: For desktop GUI (to be replaced)
 
-This defines how we ensure the tool is easy to install and consistently tested.
+**Planned:**
+- **`streamlit`**: For web application GUI
+- **`python-dotenv`**: For environment variable management
+- **`pandas`**: For data export functionality
+- **`openpyxl`**: For Excel export
 
--   **Development Environment:** **Docker**
-    -   *Why:* This is critical. Genesis has complex dependencies (CUDA, specific drivers, etc.). Docker allows us to package the entire simulation environment into a container, ensuring that any engineer can get up and running with a single command, eliminating "it works on my machine" problems.
--   **CI/CD (Continuous Integration):** **GitHub Actions**
-    -   *Why:* Automates the process of running tests, linting, and type-checking on every code change. This is our guarantee of quality and stability for the SDK.
+## 7. Code Structure
+
+- `rfq_tracker/` - Backend package
+  - `crawler.py` - File system scanning and metadata extraction
+  - `db_manager.py` - MongoDB operations and schema management
+- `dashboard/` - Frontend package
+  - `main_window.py` - PyQt6 main window (current)
+  - `widgets/` - Custom UI components
+- `run_crawler.py` - Crawler entry point
+- `run_dashboard.py` - Dashboard entry point
+- `config.json` - Application configuration
+
+For detailed technology information, see `.agent-os/product/tech-stack.md`.
