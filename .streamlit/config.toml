@@ -1,0 +1,10 @@
+[server]
+address = "0.0.0.0"
+port = 8501
+
+[theme]
+primaryColor = "#3498db"
+backgroundColor = "#0e1117"           # Dark background
+secondaryBackgroundColor = "#262730"  # Slightly lighter dark
+textColor = "#fafafa"                 # Light text
+base = "dark"                         # Set dark as base theme

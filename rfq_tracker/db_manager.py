@@ -31,14 +31,15 @@ class DBManager:
         """Ensure all required indexes exist for efficient queries and upserts."""
         self.db.projects.create_index("project_number", unique=True)
         self.db.suppliers.create_index([("project_number", 1), ("supplier_name", 1)], unique=True)
-        self.db.transmissions.create_index("zip_path", unique=True)
-        self.db.receipts.create_index("received_folder_path", unique=True)
+        # Unified submissions collection with type field
+        self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("type", 1)])
+        self.db.submissions.create_index("folder_path", unique=True)
         logger.info("Database indexes ensured.")
 
     def save_project_data(self, data: dict):
         """
         Save all extracted data for a single project using an upsert strategy.
-        This includes project details, suppliers, transmissions, and receipts.
+        This includes project details, suppliers, and submissions.
         """
         if self.db is None:
             logger.error("Database not connected. Cannot save data.")
@@ -64,21 +65,13 @@ class DBManager:
                 ]
                 self.db.suppliers.bulk_write(requests)
 
-            # Bulk upsert transmissions
-            if data["transmissions"]:
+            # Bulk upsert submissions (unified sent and received)
+            if data["submissions"]:
                 requests = [
-                    UpdateOne({"zip_path": t["zip_path"]}, {"$set": t}, upsert=True)
-                    for t in data["transmissions"]
+                    UpdateOne({"folder_path": sub["folder_path"]}, {"$set": sub}, upsert=True)
+                    for sub in data["submissions"]
                 ]
-                self.db.transmissions.bulk_write(requests)
-
-            # Bulk upsert receipts
-            if data["receipts"]:
-                requests = [
-                    UpdateOne({"received_folder_path": r["received_folder_path"]}, {"$set": r}, upsert=True)
-                    for r in data["receipts"]
-                ]
-                self.db.receipts.bulk_write(requests)
+                self.db.submissions.bulk_write(requests)
 
             logger.info(f"Upserted data for project {data['project']['project_number']}")
 
