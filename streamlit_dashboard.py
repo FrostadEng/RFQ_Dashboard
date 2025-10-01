@@ -6,8 +6,11 @@ Web interface for viewing and searching RFQ project data
 import os
 import json
 import logging
+import platform
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Any, Optional
+from urllib.parse import quote
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -66,6 +69,56 @@ def fetch_projects(_db_manager: DBManager) -> List[Dict[str, Any]]:
         return []
 
 
+@st.cache_data(ttl=300)  # Cache for 5 minutes
+def fetch_supplier_data(_db_manager: DBManager, project_number: str) -> List[Dict[str, Any]]:
+    """
+    Fetch all supplier data (suppliers, transmissions, receipts) for a project with caching.
+
+    Args:
+        _db_manager: DBManager instance (underscore prefix prevents Streamlit from hashing)
+        project_number: Project number to fetch suppliers for
+
+    Returns:
+        List of dictionaries containing supplier data with transmissions and receipts
+    """
+    try:
+        # Fetch all suppliers for the project, sorted alphabetically
+        suppliers = list(_db_manager.db.suppliers.find(
+            {"project_number": project_number}
+        ).sort("supplier_name", 1))
+
+        supplier_data = []
+
+        for supplier in suppliers:
+            supplier_name = supplier['supplier_name']
+
+            # Fetch transmissions sorted by sent_date descending (newest first)
+            transmissions = list(_db_manager.db.transmissions.find({
+                "project_number": project_number,
+                "supplier_name": supplier_name
+            }).sort("sent_date", -1))
+
+            # Fetch receipts sorted by received_date descending (newest first)
+            receipts = list(_db_manager.db.receipts.find({
+                "project_number": project_number,
+                "supplier_name": supplier_name
+            }).sort("received_date", -1))
+
+            supplier_data.append({
+                'supplier': supplier,
+                'transmissions': transmissions,
+                'receipts': receipts
+            })
+
+        logger.info(f"Loaded {len(supplier_data)} suppliers for project {project_number}")
+        return supplier_data
+
+    except Exception as e:
+        logger.error(f"Error fetching supplier data for project {project_number}: {e}")
+        st.error(f"Error loading supplier data: {e}")
+        return []
+
+
 def initialize_db_manager() -> Optional[DBManager]:
     """Initialize database connection with error handling."""
     config = load_config()
@@ -115,6 +168,146 @@ def format_timestamp(timestamp_str: str) -> str:
         return dt.strftime('%Y-%m-%d %H:%M:%S')
     except:
         return timestamp_str
+
+
+def create_file_link(file_path: str, link_text: str = "Open") -> str:
+    """
+    Create clickable link to open file in system default application.
+
+    Args:
+        file_path: Absolute path to file
+        link_text: Display text for link
+
+    Returns:
+        Markdown link string
+    """
+    try:
+        # Convert to absolute path and normalize
+        abs_path = str(Path(file_path).resolve())
+
+        # URL encode the path
+        encoded_path = quote(abs_path.replace('\\', '/'))
+
+        # Platform-specific file URL format
+        if platform.system() == 'Windows':
+            file_url = f"file:///{encoded_path}"
+        else:
+            file_url = f"file://{encoded_path}"
+
+        return f"[{link_text}]({file_url})"
+    except Exception as e:
+        logger.error(f"Error creating file link for {file_path}: {e}")
+        return f"⚠️ {link_text} (path error)"
+
+
+def create_download_button(file_path: str, button_label: str = "⬇️ Download", key_suffix: str = ""):
+    """
+    Create Streamlit download button for a file.
+
+    Args:
+        file_path: Absolute path to file
+        button_label: Display text for button
+        key_suffix: Unique suffix for button key
+
+    Returns:
+        Streamlit download button widget
+    """
+    try:
+        if not Path(file_path).exists():
+            st.caption("⚠️ File not found")
+            return None
+
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+
+        file_name = Path(file_path).name
+
+        return st.download_button(
+            label=button_label,
+            data=file_data,
+            file_name=file_name,
+            mime='application/octet-stream',
+            key=f"download_{key_suffix}_{hash(file_path)}"
+        )
+    except Exception as e:
+        logger.error(f"Error creating download button for {file_path}: {e}")
+        st.caption(f"⚠️ Download error: {str(e)[:50]}")
+        return None
+
+
+def build_folder_tree(file_paths: List[str], base_path: str) -> Dict[str, Any]:
+    """
+    Build nested folder structure from flat file list.
+
+    Args:
+        file_paths: List of absolute file paths
+        base_path: Root folder path to remove from display
+
+    Returns:
+        Nested dict representing folder hierarchy
+    """
+    tree = {}
+
+    for path in file_paths:
+        try:
+            relative_path = path.replace(base_path, '').lstrip('/').lstrip('\\')
+            parts = relative_path.split(os.sep)
+
+            current_level = tree
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:  # File
+                    if '__files__' not in current_level:
+                        current_level['__files__'] = []
+                    current_level['__files__'].append({
+                        'name': part,
+                        'path': path
+                    })
+                else:  # Folder
+                    if part not in current_level:
+                        current_level[part] = {}
+                    current_level = current_level[part]
+        except Exception as e:
+            logger.error(f"Error parsing path {path}: {e}")
+            continue
+
+    return tree
+
+
+def render_folder_tree(tree: Dict[str, Any], indent_level: int = 0, key_prefix: str = ""):
+    """
+    Recursively render folder tree structure with indentation and file links.
+
+    Args:
+        tree: Nested dict representing folder hierarchy
+        indent_level: Current indentation level (for recursion)
+        key_prefix: Prefix for unique widget keys
+    """
+    indent = "  " * indent_level
+
+    # Render folders first
+    for folder_name, subtree in sorted(tree.items()):
+        if folder_name == '__files__':
+            continue
+
+        st.markdown(f"{indent}📁 **{folder_name}**")
+        render_folder_tree(subtree, indent_level + 1, f"{key_prefix}_{folder_name}")
+
+    # Render files
+    if '__files__' in tree:
+        for file_info in sorted(tree['__files__'], key=lambda x: x['name']):
+            file_name = file_info['name']
+            file_path = file_info['path']
+
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                link = create_file_link(file_path, f"{indent}📄 {file_name}")
+                st.markdown(link)
+            with col2:
+                create_download_button(
+                    file_path,
+                    "⬇️",
+                    key_suffix=f"{key_prefix}_{file_name}"
+                )
 
 
 def main():
@@ -230,7 +423,156 @@ def main():
         st.divider()
 
         st.markdown("### 📋 Supplier Details")
-        st.info("_(Supplier detail view coming in next spec.)_")
+
+        # Fetch supplier data with spinner
+        with st.spinner("Loading supplier data..."):
+            supplier_data = fetch_supplier_data(db_manager, project['project_number'])
+
+        # Handle empty supplier list
+        if not supplier_data:
+            st.info("📭 No suppliers found for this project. Run `python run_crawler.py` to scan for RFQ data.")
+        else:
+            # Display each supplier in expandable sections
+            for idx, data in enumerate(supplier_data):
+                supplier = data['supplier']
+                transmissions = data['transmissions']
+                receipts = data['receipts']
+
+                # Auto-expand first supplier only
+                with st.expander(f"🏢 {supplier['supplier_name']}", expanded=(idx == 0)):
+                    # Two-column layout: Sent (left) | Received (right)
+                    col_sent, col_received = st.columns(2)
+
+                    # Left column: Sent Transmissions
+                    with col_sent:
+                        st.subheader("📤 Sent Transmissions")
+
+                        if not transmissions:
+                            st.caption("_No transmissions found_")
+                        else:
+                            for trans_idx, trans in enumerate(transmissions):
+                                st.markdown(f"**📦 {trans['zip_name']}**")
+
+                                # Display metadata
+                                sent_date = format_timestamp(trans.get('sent_date', 'N/A'))
+                                st.caption(f"📅 Sent: {sent_date}")
+
+                                source_files = trans.get('source_files', [])
+                                st.caption(f"📁 Source files: {len(source_files)} files")
+
+                                # File access for ZIP
+                                col_link, col_dl = st.columns([1, 1])
+                                with col_link:
+                                    zip_link = create_file_link(trans['zip_path'], "🔗 Open ZIP")
+                                    st.markdown(zip_link)
+                                with col_dl:
+                                    create_download_button(
+                                        trans['zip_path'],
+                                        "⬇️ Download ZIP",
+                                        key_suffix=f"zip_{supplier['supplier_name']}_{trans_idx}"
+                                    )
+
+                                # Source files expander (show first 20, indicate more)
+                                if source_files:
+                                    display_limit = 20
+                                    if len(source_files) > display_limit:
+                                        expander_label = f"View source files ({len(source_files)} files, showing first {display_limit})"
+                                    else:
+                                        expander_label = f"View source files ({len(source_files)} files)"
+
+                                    with st.expander(expander_label):
+                                        for file_idx, source_file in enumerate(source_files[:display_limit]):
+                                            file_col1, file_col2 = st.columns([3, 1])
+                                            with file_col1:
+                                                file_link = create_file_link(source_file, Path(source_file).name)
+                                                st.markdown(f"📄 {file_link}")
+                                            with file_col2:
+                                                create_download_button(
+                                                    source_file,
+                                                    "⬇️",
+                                                    key_suffix=f"src_{supplier['supplier_name']}_{trans_idx}_{file_idx}"
+                                                )
+
+                                        if len(source_files) > display_limit:
+                                            st.caption(f"... and {len(source_files) - display_limit} more files")
+
+                                st.divider()
+
+                    # Right column: Received Submissions
+                    with col_received:
+                        st.subheader("📥 Received Submissions")
+
+                        if not receipts:
+                            st.caption("_No submissions received_")
+                        else:
+                            for receipt_idx, receipt in enumerate(receipts):
+                                folder_name = Path(receipt['received_folder_path']).name
+                                st.markdown(f"**📂 {folder_name}**")
+
+                                # Display metadata
+                                received_date = format_timestamp(receipt.get('received_date', 'N/A'))
+                                st.caption(f"📅 Received: {received_date}")
+
+                                received_files = receipt.get('received_files', [])
+                                st.caption(f"📁 Files: {len(received_files)} total")
+
+                                # Build and render folder tree
+                                if received_files:
+                                    # Pagination for large file lists
+                                    if len(received_files) > 100:
+                                        items_per_page = 50
+                                        total_pages = (len(received_files) + items_per_page - 1) // items_per_page
+
+                                        page = st.number_input(
+                                            f"Page",
+                                            min_value=1,
+                                            max_value=total_pages,
+                                            value=1,
+                                            key=f"page_{supplier['supplier_name']}_{receipt_idx}"
+                                        )
+
+                                        start_idx = (page - 1) * items_per_page
+                                        end_idx = start_idx + items_per_page
+                                        files_to_display = received_files[start_idx:end_idx]
+
+                                        st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(received_files))} of {len(received_files)} files")
+                                    else:
+                                        files_to_display = received_files
+
+                                    # Build folder tree
+                                    try:
+                                        tree = build_folder_tree(files_to_display, receipt['received_folder_path'])
+
+                                        # Render tree with expander for large structures
+                                        with st.expander("📁 Folder Structure", expanded=True):
+                                            render_folder_tree(
+                                                tree,
+                                                key_prefix=f"tree_{supplier['supplier_name']}_{receipt_idx}"
+                                            )
+                                    except Exception as e:
+                                        logger.error(f"Error rendering folder tree: {e}")
+                                        st.error(f"Error displaying folder structure: {str(e)[:100]}")
+
+                                        # Fallback: flat file list
+                                        st.caption("Showing flat file list:")
+                                        for file_idx, file_path in enumerate(files_to_display[:20]):
+                                            file_name = Path(file_path).name
+                                            file_col1, file_col2 = st.columns([3, 1])
+                                            with file_col1:
+                                                file_link = create_file_link(file_path, file_name)
+                                                st.markdown(f"📄 {file_link}")
+                                            with file_col2:
+                                                create_download_button(
+                                                    file_path,
+                                                    "⬇️",
+                                                    key_suffix=f"rcv_{supplier['supplier_name']}_{receipt_idx}_{file_idx}"
+                                                )
+
+                                st.divider()
+
+                # Add divider between suppliers
+                if idx < len(supplier_data) - 1:
+                    st.divider()
 
     else:
         # Default state - no project selected
