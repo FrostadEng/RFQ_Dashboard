@@ -442,33 +442,6 @@ def main():
 
         st.divider()
 
-        # Manual Refresh Section
-        st.subheader("Manual Refresh")
-
-        if st.button("🔄 Refresh Data", disabled=st.session_state.is_refreshing):
-            # Run refresh in a background thread to avoid blocking the UI
-            thread = threading.Thread(target=run_refresh_in_thread)
-            thread.start()
-
-        # Display refresh status
-        if st.session_state.is_refreshing:
-            st.info("🔄 Refreshing data...")
-
-        if st.session_state.refresh_message:
-            msg_type, msg_text = st.session_state.refresh_message
-            if msg_type == "success":
-                st.success(msg_text)
-            elif msg_type == "error":
-                st.error(msg_text)
-            elif msg_type == "info" and not st.session_state.is_refreshing:
-                 st.info(msg_text)
-
-
-        if st.session_state.last_refresh:
-            st.caption(f"Last refresh: {st.session_state.last_refresh.strftime('%H:%M:%S')}")
-
-        st.divider()
-
         # Project selection
         if sorted_projects:
             project_options = [f"Project {p['project_number']}" for p in sorted_projects]
@@ -497,6 +470,30 @@ def main():
         else:
             st.warning("No projects match your search.")
             st.session_state.selected_project = None
+
+        st.divider()
+
+        # Manual Refresh Section
+        if st.button("🔄 Refresh Data", disabled=st.session_state.is_refreshing):
+            # Run refresh in a background thread to avoid blocking the UI
+            thread = threading.Thread(target=run_refresh_in_thread)
+            thread.start()
+
+        # Display refresh status
+        if st.session_state.is_refreshing:
+            st.info("🔄 Refreshing data...")
+
+        if st.session_state.refresh_message:
+            msg_type, msg_text = st.session_state.refresh_message
+            if msg_type == "success":
+                st.success(msg_text)
+            elif msg_type == "error":
+                st.error(msg_text)
+            elif msg_type == "info" and not st.session_state.is_refreshing:
+                 st.info(msg_text)
+
+        if st.session_state.last_refresh:
+            st.caption(f"Last refresh: {st.session_state.last_refresh.strftime('%H:%M:%S')}")
 
     # Main content area
     if st.session_state.selected_project:
