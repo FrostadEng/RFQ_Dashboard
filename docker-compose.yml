@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - rfq-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build: .
+    container_name: rfq-tracker-app
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./mock_projects:/app/mock_projects:ro
+      - ./config.json:/app/config.json
+    environment:
+      - MONGO_URI=mongodb://root:example@mongodb:27017/
+      - MONGO_DB=rfq_tracker
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    networks:
+      - rfq-network
+
+networks:
+  rfq-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local

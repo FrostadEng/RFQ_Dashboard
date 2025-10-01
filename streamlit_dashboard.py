@@ -7,6 +7,9 @@ import os
 import json
 import logging
 import platform
+import subprocess
+import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -134,6 +137,69 @@ def initialize_db_manager() -> Optional[DBManager]:
             st.rerun()
 
         return None
+
+
+def run_crawler_subprocess() -> (bool, str):
+    """
+    Runs the crawler script as a subprocess and returns status and output.
+    Timeout is 5 minutes.
+    """
+    command = [sys.executable, "run_crawler.py"]
+    try:
+        process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5-minute timeout
+            check=True  # Raise exception for non-zero exit codes
+        )
+        logger.info("Crawler subprocess finished successfully.")
+        logger.debug(f"Crawler output:\n{process.stdout}")
+        return True, "Crawler finished successfully."
+    except subprocess.TimeoutExpired:
+        logger.error("Crawler subprocess timed out.")
+        return False, "Crawler process timed out after 5 minutes."
+    except subprocess.CalledProcessError as e:
+        error_message = f"Crawler process failed with exit code {e.returncode}."
+        logger.error(error_message)
+        logger.error(f"Crawler stderr:\n{e.stderr}")
+        return False, f"{error_message}\nError: {e.stderr[:200]}"
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while running the crawler: {e}")
+        return False, f"An unexpected error occurred: {str(e)}"
+
+
+def run_initial_crawler():
+    """Run crawler on first load if not already run."""
+    if not st.session_state.get('initial_crawl_run', False):
+        with st.spinner("Performing initial data scan... This may take a few minutes."):
+            success, message = run_crawler_subprocess()
+            if success:
+                st.toast("✅ Initial data scan complete!", icon="🎉")
+            else:
+                st.toast(f"⚠️ Initial scan failed: {message}", icon="🔥")
+        st.session_state.initial_crawl_run = True # Ensure it only runs once
+        st.rerun()
+
+
+def run_refresh_in_thread():
+    """Target function to run crawler in a background thread."""
+    st.session_state.is_refreshing = True
+    st.session_state.refresh_message = ("info", "🔄 Refreshing data...")
+    st.rerun() # Update UI to show spinner
+
+    success, message = run_crawler_subprocess()
+
+    if success:
+        st.session_state.refresh_message = ("success", f"✅ Successfully refreshed at {datetime.now().strftime('%H:%M:%S')}")
+        # Clear caches to force data reload
+        st.cache_data.clear()
+    else:
+        st.session_state.refresh_message = ("error", f"🔥 Refresh failed: {message}")
+
+    st.session_state.is_refreshing = False
+    st.session_state.last_refresh = datetime.now()
+    st.rerun() # Update UI with final status
 
 
 def filter_projects(projects: List[Dict[str, Any]], search_term: str) -> List[Dict[str, Any]]:
@@ -317,12 +383,21 @@ def main():
     # Initialize session state
     if 'selected_project' not in st.session_state:
         st.session_state.selected_project = None
+    if 'is_refreshing' not in st.session_state:
+        st.session_state.is_refreshing = False
+    if 'refresh_message' not in st.session_state:
+        st.session_state.refresh_message = None
+    if 'last_refresh' not in st.session_state:
+        st.session_state.last_refresh = None
 
     # Initialize database connection
     db_manager = initialize_db_manager()
 
     if db_manager is None:
         return  # Exit if database connection failed
+
+    # Run initial crawler scan on first launch
+    run_initial_crawler()
 
     # Fetch projects
     with st.spinner("Loading projects from database..."):
@@ -364,6 +439,33 @@ def main():
             st.caption(f"Showing {len(sorted_projects)} of {len(all_projects)} projects")
         else:
             st.caption(f"Loaded {len(all_projects)} projects")
+
+        st.divider()
+
+        # Manual Refresh Section
+        st.subheader("Manual Refresh")
+
+        if st.button("🔄 Refresh Data", disabled=st.session_state.is_refreshing):
+            # Run refresh in a background thread to avoid blocking the UI
+            thread = threading.Thread(target=run_refresh_in_thread)
+            thread.start()
+
+        # Display refresh status
+        if st.session_state.is_refreshing:
+            st.info("🔄 Refreshing data...")
+
+        if st.session_state.refresh_message:
+            msg_type, msg_text = st.session_state.refresh_message
+            if msg_type == "success":
+                st.success(msg_text)
+            elif msg_type == "error":
+                st.error(msg_text)
+            elif msg_type == "info" and not st.session_state.is_refreshing:
+                 st.info(msg_text)
+
+
+        if st.session_state.last_refresh:
+            st.caption(f"Last refresh: {st.session_state.last_refresh.strftime('%H:%M:%S')}")
 
         st.divider()
 

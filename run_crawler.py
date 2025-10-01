@@ -7,6 +7,7 @@ import sys
 import json
 import logging
 import argparse
+import os
 from typing import Dict, Any
 
 from rfq_tracker.crawler import RFQCrawler
@@ -58,9 +59,13 @@ def main():
 
     config = load_config(args.config)
 
+    # Override with environment variables if they exist
+    mongo_uri = os.getenv('MONGO_URI', config.get("mongo_uri", "mongodb://localhost:27017"))
+    mongo_db = os.getenv('MONGO_DB', config.get("mongo_db", "rfq_tracker"))
+
     db_manager = DBManager(
-        mongo_uri=config.get("mongo_uri", "mongodb://localhost:27017"),
-        db_name=config.get("mongo_db", "rfq_tracker")
+        mongo_uri=mongo_uri,
+        db_name=mongo_db
     )
 
     crawler = RFQCrawler(config=config, db_manager=db_manager, dry_run=args.dry_run)
