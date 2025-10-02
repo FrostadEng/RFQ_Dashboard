@@ -9,7 +9,6 @@ import logging
 import platform
 import subprocess
 import sys
-import threading
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -231,8 +230,13 @@ def run_startup_crawler() -> tuple[bool, str]:
         return False, f"Error refreshing data: {str(e)[:100]}"
 
 
-def run_manual_refresh_background():
-    """Run manual refresh in background thread."""
+def run_manual_refresh() -> tuple[bool, str]:
+    """
+    Run manual refresh synchronously (not in background).
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
     try:
         result = subprocess.run(
             [sys.executable, "run_crawler.py"],
@@ -241,27 +245,18 @@ def run_manual_refresh_background():
             timeout=300  # 5 minutes
         )
 
-        st.session_state.refresh_running = False
-        st.session_state.last_refresh_time = datetime.now()
-
         if result.returncode == 0:
-            st.session_state.refresh_status = "success"
-            st.session_state.refresh_message = "Data refreshed successfully"
+            return True, "Data refreshed successfully"
         else:
             error_msg = result.stderr if result.stderr else "Unknown error"
-            st.session_state.refresh_status = "warning"
-            st.session_state.refresh_message = f"Completed with warnings: {error_msg[:100]}"
             logger.warning(f"Manual refresh completed with errors: {error_msg}")
+            return False, f"Completed with warnings: {error_msg[:100]}"
     except subprocess.TimeoutExpired:
-        st.session_state.refresh_running = False
-        st.session_state.refresh_status = "error"
-        st.session_state.refresh_message = "Refresh timed out after 5 minutes"
         logger.error("Manual refresh timed out")
+        return False, "Refresh timed out after 5 minutes"
     except Exception as e:
-        st.session_state.refresh_running = False
-        st.session_state.refresh_status = "error"
-        st.session_state.refresh_message = f"Error: {str(e)[:100]}"
         logger.error(f"Manual refresh error: {e}")
+        return False, f"Error: {str(e)[:100]}"
 
 
 def create_download_button(file_path: str, button_label: str = "⬇️ Download", key_suffix: str = ""):
@@ -385,29 +380,8 @@ def main():
         st.session_state.selected_project = None
     if 'data_refreshed' not in st.session_state:
         st.session_state.data_refreshed = False
-    if 'refresh_running' not in st.session_state:
-        st.session_state.refresh_running = False
-    if 'refresh_status' not in st.session_state:
-        st.session_state.refresh_status = None
-    if 'refresh_message' not in st.session_state:
-        st.session_state.refresh_message = None
     if 'last_refresh_time' not in st.session_state:
         st.session_state.last_refresh_time = None
-
-    # Run startup crawler on first load
-    if not st.session_state.data_refreshed:
-        with st.spinner("🔄 Initializing dashboard... Refreshing data from project files..."):
-            success, message = run_startup_crawler()
-            st.session_state.data_refreshed = True
-
-            if success:
-                st.success(f"✅ {message}")
-            elif "timeout" in message.lower():
-                st.error(f"⏱️ {message}")
-                st.info("Dashboard will load with existing data. Please check crawler logs for details.")
-            else:
-                st.warning(f"⚠️ {message}")
-                st.info("Dashboard will continue to load. You can manually refresh data if needed.")
 
     # Initialize database connection
     db_manager = initialize_db_manager()
@@ -419,10 +393,26 @@ def main():
     with st.spinner("Loading projects from database..."):
         all_projects = fetch_projects(db_manager)
 
-    # Handle empty project list
+    # Run startup crawler ONLY if database is empty AND not already attempted this session
+    if not all_projects and not st.session_state.data_refreshed:
+        with st.spinner("🔄 Database is empty. Running initial data scan..."):
+            success, message = run_startup_crawler()
+            st.session_state.data_refreshed = True
+
+            if success:
+                st.success(f"✅ {message}")
+                st.rerun()  # Reload to show the data
+            elif "timeout" in message.lower():
+                st.error(f"⏱️ {message}")
+                st.info("Dashboard will load with existing data. Please check crawler logs for details.")
+            else:
+                st.warning(f"⚠️ {message}")
+                st.info("You can manually refresh data using the button in the sidebar.")
+
+    # Handle empty project list (after potential refresh attempt)
     if not all_projects:
-        st.info("📭 No projects found. Run `python run_crawler.py` to populate data.")
-        return
+        st.info("📭 No projects found. Use the '🔄 Refresh Data' button in the sidebar to scan for projects.")
+        # Don't return - let the sidebar render so user can click refresh button
 
     # Sidebar - Project List
     with st.sidebar:
@@ -507,33 +497,26 @@ def main():
         # Refresh button
         refresh_button = st.button(
             "🔄 Refresh Data",
-            disabled=st.session_state.refresh_running,
             use_container_width=True,
             help="Refresh project data from files"
         )
 
-        if refresh_button and not st.session_state.refresh_running:
-            st.session_state.refresh_running = True
-            st.session_state.refresh_status = None
-            st.session_state.refresh_message = None
-            # Start background refresh
-            thread = threading.Thread(target=run_manual_refresh_background, daemon=True)
-            thread.start()
-            st.rerun()
+        if refresh_button:
+            with st.spinner("🔄 Refreshing data... This may take up to 5 minutes."):
+                success, message = run_manual_refresh()
+                st.session_state.last_refresh_time = datetime.now()
 
-        # Show refresh status
-        if st.session_state.refresh_running:
-            st.info("🔄 Refreshing data...")
-            # Auto-refresh UI while running
-            import time
-            time.sleep(2)
-            st.rerun()
-        elif st.session_state.refresh_status == "success":
-            st.success(f"✅ {st.session_state.refresh_message}")
-        elif st.session_state.refresh_status == "warning":
-            st.warning(f"⚠️ {st.session_state.refresh_message}")
-        elif st.session_state.refresh_status == "error":
-            st.error(f"❌ {st.session_state.refresh_message}")
+                # Clear cache to force reload of fresh data
+                fetch_projects.clear()
+                fetch_supplier_data.clear()
+
+                if success:
+                    st.success(f"✅ {message}")
+                    st.rerun()  # Reload with fresh data
+                elif "timeout" in message.lower():
+                    st.error(f"⏱️ {message}")
+                else:
+                    st.warning(f"⚠️ {message}")
 
     # Main content area
     if st.session_state.selected_project:
