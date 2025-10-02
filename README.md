@@ -220,4 +220,5 @@ All runtime settings are managed in the `config.json` file:
 
 The following diagram illustrates the general workflow of the application, from running the crawler to interacting with the dashboard.
 
-<img width="1078" height="998" alt="image" src="https://github.com/user-attachments/assets/6fae186e-cf37-4cd6-9802-255d1bdddf1f" />
+<img width="1242" height="998" alt="image" src="https://github.com/user-attachments/assets/4d2bdd26-a4f3-403d-b1c9-36efba1bc790" />
+
