@@ -17,9 +17,50 @@ Project RFQ Tracker is a web-based application designed to scan a file system fo
 
 ## Getting Started
 
-Follow these instructions to get the RFQ Tracker running on your local machine.
+There are two deployment methods: **Docker (Recommended)** and **Manual Installation**. Docker provides the easiest setup with zero MongoDB configuration.
 
-### 1. Prerequisites
+### Quick Start with Docker (Recommended)
+
+#### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows/Mac/Linux
+
+#### Deployment Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd RFQ_Dashboard
+   ```
+
+2. **Configure the application:**
+   - Edit `config.json` to set `root_path` to your project directory
+
+3. **Start the application:**
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Access the dashboard:**
+   - Open your browser to `http://localhost:8501`
+   - Data is automatically refreshed on first load
+   - Use the refresh button in the sidebar to manually update data
+
+5. **Stop the application:**
+   ```bash
+   docker compose down
+   ```
+
+**Network Access:** The Docker deployment is automatically configured for network access. Team members can access the dashboard at `http://<your-ip>:8501`.
+
+**Data Persistence:** MongoDB data persists in a Docker volume. To reset data, run `docker compose down -v`.
+
+For detailed Docker deployment instructions, Windows firewall configuration, and Task Scheduler setup, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+---
+
+### Manual Installation (Alternative)
+
+#### 1. Prerequisites
 
 #### For Windows 11
 
@@ -36,7 +77,7 @@ Follow these instructions to get the RFQ Tracker running on your local machine.
     ```
 2.  **MongoDB:** Follow the official guide to [install MongoDB on Ubuntu](httpshttps://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/).
 
-### 2. Installation
+#### 2. Installation
 
 1.  **Clone the repository** (or download the source code).
 2.  **Navigate to the project's root directory** in your terminal.
@@ -48,7 +89,7 @@ Follow these instructions to get the RFQ Tracker running on your local machine.
     - Rename `config.example.json` to `config.json` (if applicable).
     - Edit `config.json` to set the `root_path` to the directory you want to scan.
 
-### 3. Running the Application
+#### 3. Running the Application
 
 You will need to run two or three processes, ideally in separate **Command Prompt** or **PowerShell** windows.
 
@@ -82,7 +123,7 @@ streamlit run streamlit_dashboard.py
 
 The dashboard will start and display a URL. By default, it's accessible at `http://localhost:8501` on the server computer.
 
-### 4. Network Access (Team Collaboration)
+#### 4. Network Access (Team Collaboration)
 
 To make the dashboard accessible to your entire team on the local network:
 
@@ -146,7 +187,7 @@ Replace `<server-ip>` with the IP address you found in Step 1 (e.g., `http://192
 - Ensure MongoDB and Streamlit are both running on the server
 - Try accessing `http://localhost:8501` from the server computer first to verify it works locally
 
-### 5. Legacy Desktop Application
+#### 5. Legacy Desktop Application
 
 The original PyQt6 desktop application is still available:
 ```powershell

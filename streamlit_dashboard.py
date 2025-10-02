@@ -7,6 +7,8 @@ import os
 import json
 import logging
 import platform
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -198,6 +200,65 @@ def create_file_link(file_path: str, link_text: str = "Open") -> str:
         return f"⚠️ {link_text} (path error)"
 
 
+def run_startup_crawler() -> tuple[bool, str]:
+    """
+    Run the crawler on dashboard startup to refresh data.
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        # Run crawler with 5 minute timeout
+        result = subprocess.run(
+            [sys.executable, "run_crawler.py"],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes
+        )
+
+        if result.returncode == 0:
+            return True, "Data refreshed successfully"
+        else:
+            error_msg = result.stderr if result.stderr else "Unknown error"
+            logger.warning(f"Crawler completed with errors: {error_msg}")
+            return False, f"Crawler completed with warnings: {error_msg[:100]}"
+    except subprocess.TimeoutExpired:
+        logger.error("Crawler timed out after 5 minutes")
+        return False, "Crawler timed out after 5 minutes"
+    except Exception as e:
+        logger.error(f"Error running crawler: {e}")
+        return False, f"Error refreshing data: {str(e)[:100]}"
+
+
+def run_manual_refresh() -> tuple[bool, str]:
+    """
+    Run manual refresh synchronously (not in background).
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "run_crawler.py"],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes
+        )
+
+        if result.returncode == 0:
+            return True, "Data refreshed successfully"
+        else:
+            error_msg = result.stderr if result.stderr else "Unknown error"
+            logger.warning(f"Manual refresh completed with errors: {error_msg}")
+            return False, f"Completed with warnings: {error_msg[:100]}"
+    except subprocess.TimeoutExpired:
+        logger.error("Manual refresh timed out")
+        return False, "Refresh timed out after 5 minutes"
+    except Exception as e:
+        logger.error(f"Manual refresh error: {e}")
+        return False, f"Error: {str(e)[:100]}"
+
+
 def create_download_button(file_path: str, button_label: str = "⬇️ Download", key_suffix: str = ""):
     """
     Create Streamlit download button for a file.
@@ -317,6 +378,10 @@ def main():
     # Initialize session state
     if 'selected_project' not in st.session_state:
         st.session_state.selected_project = None
+    if 'data_refreshed' not in st.session_state:
+        st.session_state.data_refreshed = False
+    if 'last_refresh_time' not in st.session_state:
+        st.session_state.last_refresh_time = None
 
     # Initialize database connection
     db_manager = initialize_db_manager()
@@ -328,10 +393,26 @@ def main():
     with st.spinner("Loading projects from database..."):
         all_projects = fetch_projects(db_manager)
 
-    # Handle empty project list
+    # Run startup crawler ONLY if database is empty AND not already attempted this session
+    if not all_projects and not st.session_state.data_refreshed:
+        with st.spinner("🔄 Database is empty. Running initial data scan..."):
+            success, message = run_startup_crawler()
+            st.session_state.data_refreshed = True
+
+            if success:
+                st.success(f"✅ {message}")
+                st.rerun()  # Reload to show the data
+            elif "timeout" in message.lower():
+                st.error(f"⏱️ {message}")
+                st.info("Dashboard will load with existing data. Please check crawler logs for details.")
+            else:
+                st.warning(f"⚠️ {message}")
+                st.info("You can manually refresh data using the button in the sidebar.")
+
+    # Handle empty project list (after potential refresh attempt)
     if not all_projects:
-        st.info("📭 No projects found. Run `python run_crawler.py` to populate data.")
-        return
+        st.info("📭 No projects found. Use the '🔄 Refresh Data' button in the sidebar to scan for projects.")
+        # Don't return - let the sidebar render so user can click refresh button
 
     # Sidebar - Project List
     with st.sidebar:
@@ -395,6 +476,47 @@ def main():
         else:
             st.warning("No projects match your search.")
             st.session_state.selected_project = None
+
+        # Add spacing before refresh button
+        st.divider()
+
+        # Manual refresh section at bottom of sidebar
+        st.caption("Data Refresh")
+
+        # Show last refresh time if available
+        if st.session_state.last_refresh_time:
+            time_ago = datetime.now() - st.session_state.last_refresh_time
+            minutes_ago = int(time_ago.total_seconds() / 60)
+            if minutes_ago < 1:
+                st.caption("Last refresh: Just now")
+            elif minutes_ago == 1:
+                st.caption("Last refresh: 1 minute ago")
+            else:
+                st.caption(f"Last refresh: {minutes_ago} minutes ago")
+
+        # Refresh button
+        refresh_button = st.button(
+            "🔄 Refresh Data",
+            use_container_width=True,
+            help="Refresh project data from files"
+        )
+
+        if refresh_button:
+            with st.spinner("🔄 Refreshing data... This may take up to 5 minutes."):
+                success, message = run_manual_refresh()
+                st.session_state.last_refresh_time = datetime.now()
+
+                # Clear cache to force reload of fresh data
+                fetch_projects.clear()
+                fetch_supplier_data.clear()
+
+                if success:
+                    st.success(f"✅ {message}")
+                    st.rerun()  # Reload with fresh data
+                elif "timeout" in message.lower():
+                    st.error(f"⏱️ {message}")
+                else:
+                    st.warning(f"⚠️ {message}")
 
     # Main content area
     if st.session_state.selected_project:
