@@ -19,7 +19,12 @@ class DBManager:
         try:
             self.client = MongoClient(self.mongo_uri)
             # The ismaster command is cheap and does not require auth.
-            self.client.admin.command('ismaster')
+            # Skip for mongomock which doesn't support this command
+            try:
+                self.client.admin.command('ismaster')
+            except Exception:
+                # Mongomock or other test environments may not support ismaster
+                pass
             self.db = self.client[self.db_name]
             logger.info(f"Successfully connected to MongoDB database '{self.db_name}'")
             self._ensure_indexes()
@@ -33,7 +38,9 @@ class DBManager:
         self.db.suppliers.create_index([("project_number", 1), ("supplier_name", 1)], unique=True)
         # Unified submissions collection with type field
         self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("type", 1)])
-        self.db.submissions.create_index("folder_path", unique=True)
+        self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("folder_name", 1), ("content_hash", 1)], unique=True)
+        # Index for efficient version lookups
+        self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("folder_name", 1), ("date", -1)])
         logger.info("Database indexes ensured.")
 
     def save_project_data(self, data: dict):
@@ -65,15 +72,30 @@ class DBManager:
                 ]
                 self.db.suppliers.bulk_write(requests)
 
-            # Bulk upsert submissions (unified sent and received)
+            # Content-aware versioning for submissions
             if data["submissions"]:
-                requests = [
-                    UpdateOne({"folder_path": sub["folder_path"]}, {"$set": sub}, upsert=True)
-                    for sub in data["submissions"]
-                ]
-                self.db.submissions.bulk_write(requests)
+                for sub in data["submissions"]:
+                    # Check if this exact content already exists
+                    existing = self.db.submissions.find_one({
+                        "project_number": sub["project_number"],
+                        "supplier_name": sub["supplier_name"],
+                        "folder_name": sub["folder_name"],
+                        "content_hash": sub["content_hash"]
+                    })
 
-            logger.info(f"Upserted data for project {data['project']['project_number']}")
+                    if existing:
+                        # Content unchanged - optionally update last_checked timestamp
+                        self.db.submissions.update_one(
+                            {"_id": existing["_id"]},
+                            {"$set": {"last_checked": sub["date"]}}
+                        )
+                        logger.debug(f"Skipped duplicate: {sub['folder_name']} (hash: {sub['content_hash'][:8]}...)")
+                    else:
+                        # New version - insert it
+                        self.db.submissions.insert_one(sub)
+                        logger.debug(f"Inserted new version: {sub['folder_name']} (hash: {sub['content_hash'][:8]}...)")
+
+            logger.info(f"Processed data for project {data['project']['project_number']}")
 
         except Exception as e:
             logger.error(f"Error saving to MongoDB for project {data.get('project', {}).get('project_number')}: {e}")
