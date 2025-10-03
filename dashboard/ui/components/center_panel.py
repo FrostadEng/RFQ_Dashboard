@@ -1,36 +1,37 @@
 """
-Center panel component for RFQ Dashboard.
-Main content area displaying project details, supplier statistics, and transmissions/receipts.
+UI component for the center panel of the dashboard.
 """
-
 import logging
 import streamlit as st
-from pathlib import Path
 
 from rfq_tracker.db_manager import DBManager
 from dashboard.data.queries import fetch_supplier_data
-from dashboard.logic.processing import calculate_supplier_statistics, calculate_folder_statistics, group_events_by_folder_name, build_folder_tree
+from dashboard.logic.processing import (
+    calculate_supplier_statistics,
+    group_events_by_folder_name,
+    calculate_folder_statistics,
+    build_folder_tree
+)
 from dashboard.styles import get_statistics_badge, format_file_size
-from dashboard.utils.helpers import format_timestamp, create_file_link
-from dashboard.ui.components.file_widgets import create_download_button, render_folder_tree
-from dashboard.ui.views.file_preview import render_file_preview
+from dashboard.ui.components.file_widgets import render_folder_tree
+from dashboard.utils.helpers import format_timestamp
 
 logger = logging.getLogger(__name__)
 
 
 def render_center_panel(center_col, db_manager: DBManager):
     """
-    Render center panel with project details, supplier statistics, and transmission/receipt display.
+    Renders the center panel with project details and supplier submissions.
 
     Args:
-        center_col: Streamlit column object
-        db_manager: Database manager instance
+        center_col: The Streamlit column to render into.
+        db_manager: The database manager instance.
     """
     with center_col:
-        # Check if in preview mode
-        if st.session_state.preview_file:
-            render_file_preview()
-            return  # Exit early, don't render project details
+        # Check if in preview mode (handled in app.py, but good practice to check)
+        if st.session_state.get('preview_file'):
+            # The file_preview view will be rendered by the main app.py instead
+            return
 
         if st.session_state.selected_project:
             project = st.session_state.selected_project
@@ -81,278 +82,17 @@ def render_center_panel(center_col, db_manager: DBManager):
 
                     # Left column: Sent Transmissions
                     with col_sent:
-                            st.subheader("📤 Sent Transmissions")
-
-                            if not transmissions:
-                                st.caption("_No transmissions found_")
-                            else:
-                                # Group transmissions by folder name for version tracking
-                                grouped_transmissions = group_events_by_folder_name(transmissions)
-
-                                for group_idx, (folder_name, versions) in enumerate(grouped_transmissions.items()):
-                                    # If multiple versions exist, show version history
-                                    if len(versions) > 1:
-                                        # Calculate combined statistics
-                                        total_files = sum(len(v.get('files', [])) for v in versions)
-                                        total_size = sum(
-                                            calculate_folder_statistics(v.get('files', []))['total_size']
-                                            for v in versions
-                                        )
-
-                                        with st.expander(f"📂 {folder_name} ({len(versions)} versions)", expanded=False):
-                                            st.caption(f"{total_files} files • {format_file_size(total_size)}")
-                                            st.markdown("---")
-                                            st.caption("**Version History** (newest first)")
-
-                                            for trans_idx, trans in enumerate(versions):
-                                                files = trans.get('files', [])
-                                                version_date = format_timestamp(trans.get('date', 'N/A'))
-
-                                                # Compact version display - just timestamp and folder structure
-                                                st.markdown(f"**Version {len(versions) - trans_idx}:** {version_date}")
-
-                                                file_count = len(files)
-                                                st.caption(f"{file_count} files")
-
-                                                # Build and render folder tree (compact)
-                                                if files:
-                                                    files_to_display = files[:50]  # Limit to first 50 for version history
-                                                    try:
-                                                        tree = build_folder_tree(files_to_display, trans.get('folder_path', ''))
-                                                        with st.expander("📁 Folder Structure", expanded=False):
-                                                            render_folder_tree(
-                                                                tree,
-                                                                key_prefix=f"tree_sent_{supplier['supplier_name']}_{group_idx}_{trans_idx}"
-                                                            )
-                                                    except Exception as e:
-                                                        logger.error(f"Error rendering folder tree for transmission: {e}")
-                                                        st.caption(f"⚠️ Error displaying folder structure")
-
-                                                if trans_idx < len(versions) - 1:
-                                                    st.markdown("---")  # Separator between versions
-
-                                    else:
-                                        # Single version - render directly without version history
-                                        trans = versions[0]
-                                        trans_idx = 0
-
-                                        # Wrap each transmission in a container/card
-                                        with st.container():
-                                            st.markdown('<div class="event-card">', unsafe_allow_html=True)
-
-                                            folder_name = trans.get('folder_name', 'Unknown')
-                                            files = trans.get('files', [])
-
-                                            # Calculate date folder statistics
-                                            folder_stats = calculate_folder_statistics(files)
-                                            folder_stats_html = (
-                                                f"{get_statistics_badge('Files', str(folder_stats['file_count']), 'files')} "
-                                                f"{get_statistics_badge('Size', format_file_size(folder_stats['total_size']), 'size')}"
-                                            )
-
-                                            # Header bar with title
-                                            st.markdown(f'<div class="event-card-header"><strong>📂 {folder_name}</strong></div>', unsafe_allow_html=True)
-
-                                            # Body with metadata and stats
-                                            st.markdown('<div class="event-card-body">', unsafe_allow_html=True)
-                                            st.markdown(folder_stats_html, unsafe_allow_html=True)
-
-                                            # Display metadata
-                                            sent_date = format_timestamp(trans.get('date', 'N/A'))
-                                            st.caption(f"📅 Date: {sent_date}")
-
-                                            # Build and render folder tree (same as receipts)
-                                            if files:
-                                                # Pagination for large file lists
-                                                if len(files) > 100:
-                                                    items_per_page = 50
-                                                    total_pages = (len(files) + items_per_page - 1) // items_per_page
-
-                                                    page = st.number_input(
-                                                        f"Page",
-                                                        min_value=1,
-                                                        max_value=total_pages,
-                                                        value=1,
-                                                        key=f"page_sent_{supplier['supplier_name']}_{trans_idx}"
-                                                    )
-
-                                                    start_idx = (page - 1) * items_per_page
-                                                    end_idx = start_idx + items_per_page
-                                                    st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(files))} of {len(files)} files")
-                                                    files_to_display = files[start_idx:end_idx]
-                                                else:
-                                                    files_to_display = files
-
-                                                # Build folder tree
-                                                try:
-                                                    tree = build_folder_tree(files_to_display, trans.get('folder_path', ''))
-
-                                                    with st.expander("📁 Folder Structure", expanded=True):
-                                                        render_folder_tree(
-                                                            tree,
-                                                            key_prefix=f"tree_sent_{supplier['supplier_name']}_{trans_idx}"
-                                                        )
-                                                except Exception as e:
-                                                    logger.error(f"Error rendering folder tree for transmission: {e}")
-                                                    st.error(f"Error displaying folder structure: {str(e)[:100]}")
-
-                                                    # Fallback: flat file list
-                                                    with st.expander(f"📄 Files ({len(files_to_display)} items)"):
-                                                        for file_idx, file_path in enumerate(files_to_display):
-                                                            col1, col2 = st.columns([3, 1])
-                                                            with col1:
-                                                                link = create_file_link(file_path, Path(file_path).name)
-                                                                st.markdown(f"📄 {link}")
-                                                            with col2:
-                                                                create_download_button(
-                                                                    file_path,
-                                                                    "⬇️",
-                                                                    key_suffix=f"flat_sent_{supplier['supplier_name']}_{trans_idx}_{file_idx}"
-                                                                )
-
-                                            st.markdown('</div>', unsafe_allow_html=True)  # Close event-card-body
-                                            st.markdown('</div>', unsafe_allow_html=True)  # Close event-card
+                        st.subheader("📤 Sent Transmissions")
+                        render_submissions_column(transmissions, "sent", supplier['supplier_name'])
 
                     # Right column: Received Submissions
                     with col_received:
                         st.subheader("📥 Received Submissions")
+                        render_submissions_column(receipts, "received", supplier['supplier_name'])
 
-                        if not receipts:
-                            st.caption("_No submissions received_")
-                        else:
-                            # Group receipts by folder name for version tracking
-                            grouped_receipts = group_events_by_folder_name(receipts)
-
-                            for group_idx, (folder_name, versions) in enumerate(grouped_receipts.items()):
-                                # If multiple versions exist, show version history
-                                if len(versions) > 1:
-                                    # Calculate combined statistics
-                                    total_files = sum(len(v.get('files', [])) for v in versions)
-                                    total_size = sum(
-                                        calculate_folder_statistics(v.get('files', []))['total_size']
-                                        for v in versions
-                                    )
-
-                                    with st.expander(f"📂 {folder_name} ({len(versions)} versions)", expanded=False):
-                                        st.caption(f"{total_files} files • {format_file_size(total_size)}")
-                                        st.markdown("---")
-                                        st.caption("**Version History** (newest first)")
-
-                                        for receipt_idx, receipt in enumerate(versions):
-                                            received_files = receipt.get('files', [])
-                                            version_date = format_timestamp(receipt.get('date', 'N/A'))
-
-                                            # Compact version display - just timestamp and folder structure
-                                            st.markdown(f"**Version {len(versions) - receipt_idx}:** {version_date}")
-
-                                            file_count = len(received_files)
-                                            st.caption(f"{file_count} files")
-
-                                            # Build and render folder tree (compact)
-                                            if received_files:
-                                                files_to_display = received_files[:50]  # Limit to first 50 for version history
-                                                try:
-                                                    tree = build_folder_tree(files_to_display, receipt.get('folder_path', ''))
-                                                    with st.expander("📁 Folder Structure", expanded=False):
-                                                        render_folder_tree(
-                                                            tree,
-                                                            key_prefix=f"tree_rcv_{supplier['supplier_name']}_{group_idx}_{receipt_idx}"
-                                                        )
-                                                except Exception as e:
-                                                    logger.error(f"Error rendering folder tree: {e}")
-                                                    st.caption(f"⚠️ Error displaying folder structure")
-
-                                            if receipt_idx < len(versions) - 1:
-                                                st.markdown("---")  # Separator between versions
-
-                                else:
-                                    # Single version - render directly without version history
-                                    receipt = versions[0]
-                                    receipt_idx = 0
-
-                                    # Wrap each receipt in a container/card
-                                    with st.container():
-                                        st.markdown('<div class="event-card">', unsafe_allow_html=True)
-
-                                        folder_name = receipt.get('folder_name', 'Unknown')
-                                        received_files = receipt.get('files', [])
-
-                                        # Calculate date folder statistics
-                                        folder_stats = calculate_folder_statistics(received_files)
-                                        folder_stats_html = (
-                                            f"{get_statistics_badge('Files', str(folder_stats['file_count']), 'files')} "
-                                            f"{get_statistics_badge('Size', format_file_size(folder_stats['total_size']), 'size')}"
-                                        )
-
-                                        # Header bar with title
-                                        st.markdown(f'<div class="event-card-header"><strong>📂 {folder_name}</strong></div>', unsafe_allow_html=True)
-
-                                        # Body with metadata and stats
-                                        st.markdown('<div class="event-card-body">', unsafe_allow_html=True)
-                                        st.markdown(folder_stats_html, unsafe_allow_html=True)
-
-                                        # Display metadata
-                                        received_date = format_timestamp(receipt.get('date', 'N/A'))
-                                        st.caption(f"📅 Date: {received_date}")
-
-                                        # Build and render folder tree
-                                        if received_files:
-                                            # Pagination for large file lists
-                                            if len(received_files) > 100:
-                                                items_per_page = 50
-                                                total_pages = (len(received_files) + items_per_page - 1) // items_per_page
-
-                                                page = st.number_input(
-                                                    f"Page",
-                                                    min_value=1,
-                                                    max_value=total_pages,
-                                                    value=1,
-                                                    key=f"page_{supplier['supplier_name']}_{receipt_idx}"
-                                                )
-
-                                                start_idx = (page - 1) * items_per_page
-                                                end_idx = start_idx + items_per_page
-                                                files_to_display = received_files[start_idx:end_idx]
-
-                                                st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(received_files))} of {len(received_files)} files")
-                                            else:
-                                                files_to_display = received_files
-
-                                            # Build folder tree
-                                            try:
-                                                tree = build_folder_tree(files_to_display, receipt.get('folder_path', ''))
-
-                                                # Render tree with expander for large structures
-                                                with st.expander("📁 Folder Structure", expanded=True):
-                                                    render_folder_tree(
-                                                        tree,
-                                                        key_prefix=f"tree_{supplier['supplier_name']}_{receipt_idx}"
-                                                    )
-                                            except Exception as e:
-                                                logger.error(f"Error rendering folder tree: {e}")
-                                                st.error(f"Error displaying folder structure: {str(e)[:100]}")
-
-                                                # Fallback: flat file list
-                                                st.caption("Showing flat file list:")
-                                                for file_idx, file_path in enumerate(files_to_display[:20]):
-                                                    file_name = Path(file_path).name
-                                                    file_col1, file_col2 = st.columns([3, 1])
-                                                    with file_col1:
-                                                        file_link = create_file_link(file_path, file_name)
-                                                        st.markdown(f"📄 {file_link}")
-                                                    with file_col2:
-                                                        create_download_button(
-                                                            file_path,
-                                                            "⬇️",
-                                                            key_suffix=f"rcv_{supplier['supplier_name']}_{receipt_idx}_{file_idx}"
-                                                        )
-
-                                        st.markdown('</div>', unsafe_allow_html=True)  # Close event-card-body
-                                        st.markdown('</div>', unsafe_allow_html=True)  # Close event-card
-
-            else:
-                # No supplier data or no valid selection
-                st.info("📭 No supplier data available for this project.")
+                else:
+                    # No supplier data or no valid selection
+                    st.info("📭 No supplier data available for this project.")
         else:
             # Default state - no project selected
             st.markdown(
@@ -363,3 +103,117 @@ def render_center_panel(center_col, db_manager: DBManager):
                 """,
                 unsafe_allow_html=True
             )
+
+
+def render_submissions_column(events: list, event_type: str, supplier_name: str):
+    """
+    Renders a column of submissions (sent or received).
+
+    Args:
+        events: A list of submission event dictionaries.
+        event_type: The type of event ('sent' or 'received').
+        supplier_name: The name of the supplier.
+    """
+    if not events:
+        st.caption(f"_No {event_type} submissions found_")
+        return
+
+    grouped_events = group_events_by_folder_name(events)
+
+    for group_idx, (folder_name, versions) in enumerate(grouped_events.items()):
+        if len(versions) > 1:
+            render_versioned_submission(versions, event_type, supplier_name, group_idx, folder_name)
+        else:
+            render_single_submission(versions[0], event_type, supplier_name, group_idx)
+
+
+def render_versioned_submission(versions: list, event_type: str, supplier_name: str, group_idx: int, folder_name: str):
+    """Renders a submission with multiple versions."""
+    total_files = sum(len(v.get('files', [])) for v in versions)
+    total_size = sum(
+        calculate_folder_statistics(v.get('files', []))['total_size']
+        for v in versions
+    )
+
+    with st.expander(f"📂 {folder_name} ({len(versions)} versions)", expanded=False):
+        st.caption(f"{total_files} files • {format_file_size(total_size)}")
+        st.markdown("---")
+        st.caption("**Version History** (newest first)")
+
+        for version_idx, version in enumerate(versions):
+            files = version.get('files', [])
+            version_date = format_timestamp(version.get('date', 'N/A'))
+
+            st.markdown(f"**Version {len(versions) - version_idx}:** {version_date}")
+            st.caption(f"{len(files)} files")
+
+            if files:
+                files_to_display = files[:50]  # Limit to first 50 for version history
+                try:
+                    tree = build_folder_tree(files_to_display, version.get('folder_path', ''))
+                    with st.expander("📁 Folder Structure", expanded=False):
+                        render_folder_tree(
+                            tree,
+                            key_prefix=f"tree_{event_type}_{supplier_name}_{group_idx}_{version_idx}"
+                        )
+                except Exception as e:
+                    logger.error(f"Error rendering folder tree for versioned submission: {e}")
+                    st.caption("⚠️ Error displaying folder structure")
+
+            if version_idx < len(versions) - 1:
+                st.markdown("---")
+
+
+def render_single_submission(event: dict, event_type: str, supplier_name: str, event_idx: int):
+    """Renders a single submission card."""
+    with st.container():
+        st.markdown('<div class="event-card">', unsafe_allow_html=True)
+
+        folder_name = event.get('folder_name', 'Unknown')
+        files = event.get('files', [])
+
+        folder_stats = calculate_folder_statistics(files)
+        folder_stats_html = (
+            f"{get_statistics_badge('Files', str(folder_stats['file_count']), 'files')} "
+            f"{get_statistics_badge('Size', format_file_size(folder_stats['total_size']), 'size')}"
+        )
+
+        st.markdown(f'<div class="event-card-header"><strong>📂 {folder_name}</strong></div>', unsafe_allow_html=True)
+        st.markdown('<div class="event-card-body">', unsafe_allow_html=True)
+        st.markdown(folder_stats_html, unsafe_allow_html=True)
+
+        event_date = format_timestamp(event.get('date', 'N/A'))
+        st.caption(f"📅 Date: {event_date}")
+
+        if files:
+            render_file_list_with_pagination(files, event_type, supplier_name, event_idx, event.get('folder_path', ''))
+
+        st.markdown('</div></div>', unsafe_allow_html=True)
+
+
+def render_file_list_with_pagination(files: list, event_type: str, supplier_name: str, event_idx: int, base_path: str):
+    """Renders a paginated list of files with a folder tree."""
+    if len(files) > 100:
+        items_per_page = 50
+        total_pages = (len(files) + items_per_page - 1) // items_per_page
+        page_key = f"page_{event_type}_{supplier_name}_{event_idx}"
+        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key=page_key)
+
+        start_idx = (page - 1) * items_per_page
+        end_idx = start_idx + items_per_page
+        st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(files))} of {len(files)} files")
+        files_to_display = files[start_idx:end_idx]
+    else:
+        files_to_display = files
+
+    try:
+        tree = build_folder_tree(files_to_display, base_path)
+        with st.expander("📁 Folder Structure", expanded=True):
+            render_folder_tree(
+                tree,
+                key_prefix=f"tree_{event_type}_{supplier_name}_{event_idx}"
+            )
+    except Exception as e:
+        logger.error(f"Error rendering folder tree for single submission: {e}")
+        st.error(f"Error displaying folder structure: {str(e)[:100]}")
+        # Fallback to flat list can be implemented here if needed

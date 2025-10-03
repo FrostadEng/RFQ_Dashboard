@@ -1,17 +1,13 @@
 """
-Business logic and data processing functions for RFQ Dashboard.
+Business logic and data processing functions for the RFQ Dashboard.
 """
-
 import os
-import logging
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any
+from collections import defaultdict
 
 from rfq_tracker.db_manager import DBManager
-
-logger = logging.getLogger(__name__)
 
 
 def filter_projects(
@@ -209,8 +205,8 @@ def build_folder_tree(file_paths: List[str], base_path: str) -> Dict[str, Any]:
                     if part not in current_level:
                         current_level[part] = {}
                     current_level = current_level[part]
-        except Exception as e:
-            logger.error(f"Error parsing path {path}: {e}")
+        except Exception:
+            # logger.error(f"Error parsing path {path}: {e}")
             continue
 
     return tree

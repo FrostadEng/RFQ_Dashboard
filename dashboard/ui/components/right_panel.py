@@ -1,8 +1,6 @@
 """
-Right panel component for RFQ Dashboard.
-Contains supplier selection list.
+UI component for the right panel of the dashboard.
 """
-
 import streamlit as st
 
 from rfq_tracker.db_manager import DBManager
@@ -11,11 +9,11 @@ from dashboard.data.queries import fetch_supplier_data
 
 def render_right_panel(right_col, db_manager: DBManager):
     """
-    Render right panel with supplier selection.
+    Renders the right panel with the supplier selection list.
 
     Args:
-        right_col: Streamlit column object
-        db_manager: Database manager instance
+        right_col: The Streamlit column to render into.
+        db_manager: The database manager instance.
     """
     with right_col:
         if st.session_state.selected_project:

@@ -1,27 +1,23 @@
 """
-Left panel component for RFQ Dashboard.
-Contains project list, filters, search, pagination, and project selection.
+UI component for the left panel of the dashboard.
 """
-
-import streamlit as st
 from datetime import datetime
-from typing import List, Dict, Any
+import streamlit as st
 
 from rfq_tracker.db_manager import DBManager
-from dashboard.data.queries import fetch_projects, fetch_all_suppliers
 from dashboard.logic.processing import filter_projects, sort_projects
 from dashboard.utils.helpers import run_manual_refresh
 
 
-def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[str, Any]], all_suppliers: List[str]):
+def render_left_panel(left_col, db_manager: DBManager, all_projects: list, all_suppliers: list):
     """
-    Render left panel with filters, search, pagination, and project selection.
+    Renders the left panel with project list, filters, and pagination.
 
     Args:
-        left_col: Streamlit column object
-        db_manager: Database manager instance
-        all_projects: List of all project dictionaries
-        all_suppliers: List of all supplier names
+        left_col: The Streamlit column to render into.
+        db_manager: The database manager instance.
+        all_projects: A list of all project dictionaries.
+        all_suppliers: A list of all supplier names.
     """
     with left_col:
         # Manual Refresh Button at top
@@ -29,9 +25,8 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
             with st.spinner("🔄 Refreshing data..."):
                 success, message = run_manual_refresh()
                 st.session_state.last_refresh_time = datetime.now()
-                fetch_projects.clear()
-                fetch_supplier_data.clear()
-                fetch_all_suppliers.clear()
+                # Clearing the cache for all data fetching functions
+                st.cache_data.clear()
 
                 if success:
                     st.success("✅ Refreshed")
@@ -49,7 +44,7 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
             search_term = st.text_input(
                 "Search Project Number",
                 placeholder="Enter project number...",
-                key="search_input"
+                key="search_term"
             )
 
             # Supplier multiselect filter
@@ -93,11 +88,6 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
                     st.session_state.current_page = 1
                     st.rerun()
 
-        # If no filters in expander, use empty values
-        if 'search_term' not in locals():
-            search_term = ''
-            selected_suppliers = st.session_state.selected_suppliers
-
         # Sort options (always visible)
         sort_option = st.selectbox(
             "Sort by",
@@ -110,11 +100,15 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
             key="sort_select"
         )
 
+        # Always get filter values from session_state before filtering
+        search_term_from_state = st.session_state.get('search_term', '')
+        selected_suppliers_from_state = st.session_state.get('selected_suppliers', [])
+
         # Filter and sort projects
         filtered_projects = filter_projects(
             all_projects,
-            search_term,
-            selected_suppliers,
+            search_term_from_state,
+            selected_suppliers_from_state,
             st.session_state.date_range_start,
             st.session_state.date_range_end,
             db_manager
@@ -187,7 +181,3 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
                 if st.button("▶", key="next_page", disabled=st.session_state.current_page >= total_pages):
                     st.session_state.current_page += 1
                     st.rerun()
-
-
-# Import fetch_supplier_data to clear cache
-from dashboard.data.queries import fetch_supplier_data

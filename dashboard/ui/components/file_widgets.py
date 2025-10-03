@@ -1,11 +1,13 @@
 """
-File-related UI widgets for RFQ Dashboard.
+UI components for file interaction and display.
 """
-
 import logging
-import streamlit as st
 from pathlib import Path
 from typing import Dict, Any
+
+import streamlit as st
+
+from dashboard.logic.processing import build_folder_tree
 
 logger = logging.getLogger(__name__)
 

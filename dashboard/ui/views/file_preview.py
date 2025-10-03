@@ -1,17 +1,15 @@
 """
-File preview view for RFQ Dashboard.
+File preview view for the RFQ Dashboard.
 """
-
 import base64
 import logging
-import streamlit as st
 from pathlib import Path
+import streamlit as st
 
 from dashboard.styles import format_file_size
 from dashboard.ui.components.file_widgets import create_download_button
 
 logger = logging.getLogger(__name__)
-
 
 def render_file_preview():
     """

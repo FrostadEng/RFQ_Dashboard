@@ -1,7 +1,7 @@
 {
   "filter_tags": ["Template", "archive"],
   "file_filter_tags": [".db"],
-  "mongo_uri": "mongodb://root:example@mongodb:27017/",
+  "mongo_uri": "mongodb://mongodb:27017/",
   "mongo_db": "rfq_tracker",
-  "root_path": "mock_projects"
+  "root_path": "/app/mock_projects"
 }

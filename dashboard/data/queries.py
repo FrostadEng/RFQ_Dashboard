@@ -1,16 +1,14 @@
 """
-Database query functions for RFQ Dashboard.
+Database query functions for the RFQ Dashboard.
 """
-
 import logging
-import streamlit as st
 from typing import List, Dict, Any, Optional
+import streamlit as st
 
 from rfq_tracker.db_manager import DBManager
 from dashboard.config import load_config
 
 logger = logging.getLogger(__name__)
-
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def fetch_all_suppliers(_db_manager: DBManager) -> List[str]:

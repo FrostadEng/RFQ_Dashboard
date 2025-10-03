@@ -1,17 +1,15 @@
 """
-Helper utility functions for RFQ Dashboard.
+Utility functions for the RFQ Dashboard.
 """
-
-import sys
 import logging
 import platform
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
-
 
 def format_timestamp(timestamp_str: str) -> str:
     """Format ISO 8601 timestamp to human-readable format."""
@@ -20,7 +18,6 @@ def format_timestamp(timestamp_str: str) -> str:
         return dt.strftime('%Y-%m-%d %H:%M:%S')
     except:
         return timestamp_str
-
 
 def create_file_link(file_path: str, link_text: str = "Open") -> str:
     """
