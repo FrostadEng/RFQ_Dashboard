@@ -118,7 +118,7 @@ python run_crawler.py
 
 Once the database is running, you can start the web interface.
 ```powershell
-streamlit run streamlit_dashboard.py
+streamlit run app.py
 ```
 
 The dashboard will start and display a URL. By default, it's accessible at `http://localhost:8501` on the server computer.
@@ -191,7 +191,7 @@ Replace `<server-ip>` with the IP address you found in Step 1 (e.g., `http://192
 
 The original PyQt6 desktop application is still available:
 ```powershell
-python run_dashboard.py
+python app.py
 ```
 
 This runs locally on your machine and does not require network configuration.
