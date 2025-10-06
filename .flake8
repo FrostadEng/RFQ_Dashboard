@@ -1,0 +1,20 @@
+[flake8]
+# Set a slightly longer max line length
+max-line-length = 100
+# Ignore some folders
+exclude =
+    .git,
+    __pycache__,
+    docs,
+    build,
+    dist,
+    venv,
+    .venv
+# Ignore specific error codes if necessary
+# For example, ignore E501 (line too long) for specific files if needed
+# per-file-ignores =
+#     rfq_tracker/db_manager.py: E501
+# We can also ignore specific warnings globally if they are not useful.
+# W503: line break before binary operator (black code formatter prefers this)
+# E203: whitespace before ':' (also a black compatibility issue)
+ignore = W503, E203

@@ -5,6 +5,7 @@ Core crawler logic for scanning RFQ metadata from project directories.
 import sys
 import json
 import logging
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import List, Dict, Any
@@ -33,7 +34,7 @@ class RFQCrawler:
         self.dry_run = dry_run
 
         # RFQ folder names to search for (case-insensitive)
-        self.rfq_folder_names = ["RFQ", "Supplier RFQ", "Contractor"]
+        self.rfq_folder_names = ["RFQ", "Supplier RFQ", "Contractor", "1-RFQ"]
 
     def is_project_folder(self, folder_name: str) -> bool:
         """Check if folder name consists entirely of digits."""
@@ -70,6 +71,46 @@ class RFQCrawler:
             logger.error(f"Error getting timestamp for {file_path}: {e}")
             return datetime.now(timezone.utc).isoformat()
 
+    def compute_content_hash(self, folder_path: Path) -> str:
+        """
+        Compute a content hash for a folder based on file paths and their SHA-256 hashes.
+
+        Args:
+            folder_path: Path to the folder to hash
+
+        Returns:
+            SHA-256 hash string representing the folder's contents
+        """
+        file_hashes = []
+
+        # Collect all files recursively
+        for file_path in sorted(folder_path.rglob("*")):
+            if file_path.is_file() and not self.should_skip_file(file_path.name):
+                try:
+                    # Compute file hash
+                    sha256 = hashlib.sha256()
+                    with open(file_path, 'rb') as f:
+                        # Read in chunks to handle large files
+                        for chunk in iter(lambda: f.read(8192), b''):
+                            sha256.update(chunk)
+
+                    # Store relative path + hash
+                    relative_path = str(file_path.relative_to(folder_path))
+                    file_hashes.append({
+                        'path': relative_path,
+                        'hash': sha256.hexdigest()
+                    })
+                except Exception as e:
+                    logger.warning(f"Could not hash file {file_path}: {e}")
+                    continue
+
+        # Serialize to JSON and hash the entire structure
+        if not file_hashes:
+            return hashlib.sha256(b'').hexdigest()  # Empty folder hash
+
+        content_json = json.dumps(file_hashes, sort_keys=True)
+        return hashlib.sha256(content_json.encode('utf-8')).hexdigest()
+
     def process_submission_folder(self, folder_path: Path, project_number: str,
                                   supplier_name: str, folder_type: str) -> List[Dict[str, Any]]:
         """
@@ -96,21 +137,25 @@ class RFQCrawler:
                 if self.should_skip_folder(submission_folder.name):
                     continue
 
+                # Compute content hash for version tracking
+                content_hash = self.compute_content_hash(submission_folder)
+
                 submission = {
                     "project_number": project_number,
                     "supplier_name": supplier_name,
                     "type": folder_type,  # "sent" or "received"
                     "folder_name": submission_folder.name,
-                    "folder_path": str(submission_folder),
+                    "folder_path": str(submission_folder.resolve()),
                     "date": self.get_file_creation_time(submission_folder),
+                    "content_hash": content_hash,
                     "files": [
-                        str(f) for f in submission_folder.rglob("*")
+                        str(f.resolve()) for f in submission_folder.rglob("*")
                         if f.is_file() and not self.should_skip_file(f.name)
                     ]
                 }
 
                 submissions.append(submission)
-                logger.debug(f"Found {len(submission['files'])} files in {folder_type} folder {submission_folder.name}")
+                logger.debug(f"Found {len(submission['files'])} files in {folder_type} folder {submission_folder.name} (hash: {content_hash[:8]}...)")
 
         logger.info(f"Found {len(submissions)} {folder_type} submissions in {folder_path}")
         return submissions
@@ -127,13 +172,18 @@ class RFQCrawler:
             "path": str(supplier_folder)
         }
 
-        # Process Sent and Received folders identically
+        # Process Sent folder
         sent_submissions = self.process_submission_folder(
             supplier_folder / "Sent", project_number, supplier_name, "sent"
         )
 
+        # Process Received folder (check both spellings: "Received" and "Recieved")
+        received_folder = supplier_folder / "Received"
+        if not received_folder.exists():
+            received_folder = supplier_folder / "Recieved"
+
         received_submissions = self.process_submission_folder(
-            supplier_folder / "Received", project_number, supplier_name, "received"
+            received_folder, project_number, supplier_name, "received"
         )
 
         # Combine into single submissions list
@@ -158,7 +208,16 @@ class RFQCrawler:
         all_suppliers, all_submissions = [], []
 
         for rfq_folder in self.find_rfq_folders(project_folder):
-            for supplier_folder in rfq_folder.iterdir():
+            # Check for "Supplier RFQ Quotes" intermediate layer (new structure)
+            supplier_quotes_folder = rfq_folder / "Supplier RFQ Quotes"
+            if supplier_quotes_folder.exists() and supplier_quotes_folder.is_dir():
+                # New structure: navigate through intermediate layer
+                supplier_folders = supplier_quotes_folder.iterdir()
+            else:
+                # Legacy structure: suppliers directly under RFQ folder
+                supplier_folders = rfq_folder.iterdir()
+
+            for supplier_folder in supplier_folders:
                 if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
                     result = self.process_supplier_folder(supplier_folder, project_number)
                     all_suppliers.append(result["supplier"])
@@ -196,8 +255,7 @@ class RFQCrawler:
                         logger.info(f"Dry Run: Would save data for project {project_data['project']['project_number']}")
                         logger.info(f"Project: {json.dumps(project_data['project'], indent=2)}")
                         logger.info(f"Suppliers: {json.dumps(project_data['suppliers'], indent=2)}")
-                        logger.info(f"Transmissions: {json.dumps(project_data['transmissions'], indent=2)}")
-                        logger.info(f"Receipts: {json.dumps(project_data['receipts'], indent=2)}")
+                        logger.info(f"Submissions: {json.dumps(project_data['submissions'], indent=2)}")
                     else:
                         self.db_manager.save_project_data(project_data)
                     project_count += 1
