@@ -32,4 +32,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8501/_stcore/health
 
 # Command to run the Streamlit application
-CMD ["streamlit", "run", "streamlit_dashboard.py"]
+CMD ["streamlit", "run", "app.py"]
