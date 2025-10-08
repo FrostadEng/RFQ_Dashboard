@@ -86,9 +86,9 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
 
 ## Success Criteria
 
-- [ ] New app.py runs successfully with `streamlit run app.py`
-- [ ] All existing features work identically to original streamlit_dashboard.py
-- [ ] Dashboard/ directory structure matches technical spec exactly
-- [ ] app.py is lean (~100-150 lines) with no business logic or UI rendering
-- [ ] All manual tests pass
-- [ ] Original streamlit_dashboard.py can be safely archived
+- [x] New app.py runs successfully with `streamlit run app.py`
+- [x] All existing features work identically to original streamlit_dashboard.py
+- [x] Dashboard/ directory structure matches technical spec exactly
+- [x] app.py is lean (~100-150 lines) with no business logic or UI rendering
+- [x] All manual tests pass
+- [x] Original streamlit_dashboard.py can be safely archived
