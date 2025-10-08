@@ -112,7 +112,8 @@ class RFQCrawler:
         return hashlib.sha256(content_json.encode('utf-8')).hexdigest()
 
     def process_submission_folder(self, folder_path: Path, project_number: str,
-                                  supplier_name: str, folder_type: str) -> List[Dict[str, Any]]:
+                                  supplier_name: str, folder_type: str,
+                                  partner_type: str = "Supplier") -> List[Dict[str, Any]]:
         """
         Process a submission folder (Sent or Received) to extract metadata.
 
@@ -121,6 +122,7 @@ class RFQCrawler:
             project_number: Project number
             supplier_name: Supplier name
             folder_type: "sent" or "received"
+            partner_type: "Supplier" or "Contractor" (default: "Supplier")
 
         Returns:
             List of submission dictionaries
@@ -148,6 +150,7 @@ class RFQCrawler:
                     "folder_path": str(submission_folder.resolve()),
                     "date": self.get_file_creation_time(submission_folder),
                     "content_hash": content_hash,
+                    "partner_type": partner_type,
                     "files": [
                         str(f.resolve()) for f in submission_folder.rglob("*")
                         if f.is_file() and not self.should_skip_file(f.name)
@@ -161,20 +164,32 @@ class RFQCrawler:
         return submissions
 
     def process_supplier_folder(self, supplier_folder: Path,
-                              project_number: str) -> Dict[str, Any]:
-        """Process a single supplier folder."""
+                              project_number: str,
+                              partner_type: str = "Supplier") -> Dict[str, Any]:
+        """
+        Process a single supplier folder.
+
+        Args:
+            supplier_folder: Path to supplier folder
+            project_number: Project number
+            partner_type: "Supplier" or "Contractor" (default: "Supplier")
+
+        Returns:
+            Dictionary containing supplier document and submissions
+        """
         supplier_name = supplier_folder.name
         logger.info(f"Processing supplier: {supplier_name} in project {project_number}")
 
         supplier_doc = {
             "project_number": project_number,
             "supplier_name": supplier_name,
-            "path": str(supplier_folder)
+            "path": str(supplier_folder),
+            "partner_type": partner_type
         }
 
         # Process Sent folder
         sent_submissions = self.process_submission_folder(
-            supplier_folder / "Sent", project_number, supplier_name, "sent"
+            supplier_folder / "Sent", project_number, supplier_name, "sent", partner_type
         )
 
         # Process Received folder (check both spellings: "Received" and "Recieved")
@@ -183,7 +198,7 @@ class RFQCrawler:
             received_folder = supplier_folder / "Recieved"
 
         received_submissions = self.process_submission_folder(
-            received_folder, project_number, supplier_name, "received"
+            received_folder, project_number, supplier_name, "received", partner_type
         )
 
         # Combine into single submissions list
@@ -208,20 +223,35 @@ class RFQCrawler:
         all_suppliers, all_submissions = [], []
 
         for rfq_folder in self.find_rfq_folders(project_folder):
-            # Check for "Supplier RFQ Quotes" intermediate layer (new structure)
+            # Check for partner type intermediate layers
             supplier_quotes_folder = rfq_folder / "Supplier RFQ Quotes"
-            if supplier_quotes_folder.exists() and supplier_quotes_folder.is_dir():
-                # New structure: navigate through intermediate layer
-                supplier_folders = supplier_quotes_folder.iterdir()
-            else:
-                # Legacy structure: suppliers directly under RFQ folder
-                supplier_folders = rfq_folder.iterdir()
+            contractor_quotes_folder = rfq_folder / "Contractor RFQ Quotes"
 
-            for supplier_folder in supplier_folders:
-                if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
-                    result = self.process_supplier_folder(supplier_folder, project_number)
-                    all_suppliers.append(result["supplier"])
-                    all_submissions.extend(result["submissions"])
+            # Process Supplier RFQ Quotes folder if it exists
+            if supplier_quotes_folder.exists() and supplier_quotes_folder.is_dir():
+                for supplier_folder in supplier_quotes_folder.iterdir():
+                    if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
+                        result = self.process_supplier_folder(supplier_folder, project_number, "Supplier")
+                        all_suppliers.append(result["supplier"])
+                        all_submissions.extend(result["submissions"])
+
+            # Process Contractor RFQ Quotes folder if it exists
+            if contractor_quotes_folder.exists() and contractor_quotes_folder.is_dir():
+                for supplier_folder in contractor_quotes_folder.iterdir():
+                    if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
+                        result = self.process_supplier_folder(supplier_folder, project_number, "Contractor")
+                        all_suppliers.append(result["supplier"])
+                        all_submissions.extend(result["submissions"])
+
+            # Legacy structure: suppliers directly under RFQ folder (no intermediate layer)
+            # Only process if we didn't find the new folder structures
+            if not (supplier_quotes_folder.exists() or contractor_quotes_folder.exists()):
+                for supplier_folder in rfq_folder.iterdir():
+                    if supplier_folder.is_dir() and not self.should_skip_folder(supplier_folder.name):
+                        # Default to "Supplier" for legacy structures
+                        result = self.process_supplier_folder(supplier_folder, project_number, "Supplier")
+                        all_suppliers.append(result["supplier"])
+                        all_submissions.extend(result["submissions"])
 
         return {
             "project": project_doc,

@@ -198,3 +198,233 @@ class TestFolderStructureParsing:
 
         # Should still find submissions (implementation will handle case variations)
         assert len(project_data["submissions"]) >= 1
+
+
+class TestPartnerTypeDetection:
+    """Test partner_type field detection and assignment based on folder structure."""
+
+    @pytest.fixture
+    def mock_db_manager(self):
+        """Create a mock database manager."""
+        db_manager = Mock()
+        db_manager.connect = Mock()
+        db_manager.close = Mock()
+        db_manager.save_project_data = Mock()
+        return db_manager
+
+    @pytest.fixture
+    def temp_project_root(self):
+        """Create a temporary directory for test projects."""
+        temp_dir = tempfile.mkdtemp()
+        yield Path(temp_dir)
+        shutil.rmtree(temp_dir)
+
+    def create_contractor_structure(self, root: Path, project_num: str, contractor: str):
+        """Create Contractor RFQ Quotes folder structure for testing."""
+        project_path = root / project_num / "1-RFQ" / "Contractor RFQ Quotes" / contractor
+        (project_path / "Received" / "2024-03-01-Initial-Response").mkdir(parents=True)
+        (project_path / "Sent" / "2024-02-15-RFQ-Package").mkdir(parents=True)
+
+        # Create test files
+        (project_path / "Received" / "2024-03-01-Initial-Response" / "bid.pdf").touch()
+        (project_path / "Sent" / "2024-02-15-RFQ-Package" / "scope.pdf").touch()
+
+        return project_path
+
+    def create_supplier_structure(self, root: Path, project_num: str, supplier: str):
+        """Create Supplier RFQ Quotes folder structure for testing."""
+        project_path = root / project_num / "1-RFQ" / "Supplier RFQ Quotes" / supplier
+        (project_path / "Received" / "2024-03-10-Quote").mkdir(parents=True)
+        (project_path / "Sent" / "2024-03-05-Request").mkdir(parents=True)
+
+        # Create test files
+        (project_path / "Received" / "2024-03-10-Quote" / "quote.pdf").touch()
+        (project_path / "Sent" / "2024-03-05-Request" / "request.pdf").touch()
+
+        return project_path
+
+    def create_legacy_structure(self, root: Path, project_num: str, supplier: str):
+        """Create legacy folder structure (default supplier type)."""
+        project_path = root / project_num / "RFQ" / supplier
+        (project_path / "Received" / "2024-01-15").mkdir(parents=True)
+        (project_path / "Sent" / "2024-01-20").mkdir(parents=True)
+
+        # Create test files
+        (project_path / "Received" / "2024-01-15" / "response.pdf").touch()
+        (project_path / "Sent" / "2024-01-20" / "request.pdf").touch()
+
+        return project_path
+
+    def test_detect_contractor_rfq_quotes_path(self, temp_project_root, mock_db_manager):
+        """Test detection of 'Contractor RFQ Quotes' folder pattern in path."""
+        self.create_contractor_structure(temp_project_root, "12345", "ContractorA")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_path = temp_project_root / "12345"
+        rfq_folder = project_path / "1-RFQ"
+        contractor_quotes_folder = rfq_folder / "Contractor RFQ Quotes"
+
+        # Verify folder exists
+        assert contractor_quotes_folder.exists()
+        assert contractor_quotes_folder.is_dir()
+
+        # Verify RFQ folder is detected
+        rfq_folders = crawler.find_rfq_folders(project_path)
+        assert len(rfq_folders) == 1
+        assert rfq_folders[0].name == "1-RFQ"
+
+    def test_detect_supplier_rfq_quotes_path(self, temp_project_root, mock_db_manager):
+        """Test detection of 'Supplier RFQ Quotes' folder pattern in path."""
+        self.create_supplier_structure(temp_project_root, "24038", "SupplierB")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_path = temp_project_root / "24038"
+        rfq_folder = project_path / "1-RFQ"
+        supplier_quotes_folder = rfq_folder / "Supplier RFQ Quotes"
+
+        # Verify folder exists
+        assert supplier_quotes_folder.exists()
+        assert supplier_quotes_folder.is_dir()
+
+        # Verify RFQ folder is detected
+        rfq_folders = crawler.find_rfq_folders(project_path)
+        assert len(rfq_folders) == 1
+
+    def test_partner_type_contractor_assigned_to_supplier_doc(self, temp_project_root, mock_db_manager):
+        """Test that partner_type='Contractor' is assigned to supplier document from Contractor path."""
+        self.create_contractor_structure(temp_project_root, "12345", "ContractorA")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "12345")
+
+        # Verify supplier document has partner_type='Contractor'
+        assert len(project_data["suppliers"]) == 1
+        supplier_doc = project_data["suppliers"][0]
+        assert supplier_doc["supplier_name"] == "ContractorA"
+        assert supplier_doc.get("partner_type") == "Contractor"
+
+    def test_partner_type_supplier_assigned_to_supplier_doc(self, temp_project_root, mock_db_manager):
+        """Test that partner_type='Supplier' is assigned to supplier document from Supplier path."""
+        self.create_supplier_structure(temp_project_root, "24038", "SupplierB")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "24038")
+
+        # Verify supplier document has partner_type='Supplier'
+        assert len(project_data["suppliers"]) == 1
+        supplier_doc = project_data["suppliers"][0]
+        assert supplier_doc["supplier_name"] == "SupplierB"
+        assert supplier_doc.get("partner_type") == "Supplier"
+
+    def test_partner_type_default_supplier_for_legacy_structure(self, temp_project_root, mock_db_manager):
+        """Test that partner_type defaults to 'Supplier' for legacy folder structure."""
+        self.create_legacy_structure(temp_project_root, "99999", "LegacySupplier")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "99999")
+
+        # Verify supplier document defaults to partner_type='Supplier'
+        assert len(project_data["suppliers"]) == 1
+        supplier_doc = project_data["suppliers"][0]
+        assert supplier_doc["supplier_name"] == "LegacySupplier"
+        assert supplier_doc.get("partner_type") == "Supplier"
+
+    def test_partner_type_contractor_assigned_to_submission_docs(self, temp_project_root, mock_db_manager):
+        """Test that partner_type='Contractor' is assigned to all submission documents."""
+        self.create_contractor_structure(temp_project_root, "12345", "ContractorA")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "12345")
+
+        # Verify all submissions have partner_type='Contractor'
+        assert len(project_data["submissions"]) >= 2  # At least sent and received
+        for submission in project_data["submissions"]:
+            assert submission["supplier_name"] == "ContractorA"
+            assert submission.get("partner_type") == "Contractor"
+
+    def test_partner_type_supplier_assigned_to_submission_docs(self, temp_project_root, mock_db_manager):
+        """Test that partner_type='Supplier' is assigned to all submission documents."""
+        self.create_supplier_structure(temp_project_root, "24038", "SupplierB")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "24038")
+
+        # Verify all submissions have partner_type='Supplier'
+        assert len(project_data["submissions"]) >= 2  # At least sent and received
+        for submission in project_data["submissions"]:
+            assert submission["supplier_name"] == "SupplierB"
+            assert submission.get("partner_type") == "Supplier"
+
+    def test_partner_type_mixed_project_both_types(self, temp_project_root, mock_db_manager):
+        """Test project with both Contractor and Supplier RFQ Quotes folders."""
+        # Create both contractor and supplier structures in same project
+        contractor_path = temp_project_root / "50000" / "1-RFQ" / "Contractor RFQ Quotes" / "ContractorX"
+        (contractor_path / "Received" / "2024-04-01").mkdir(parents=True)
+        (contractor_path / "Received" / "2024-04-01" / "bid.pdf").touch()
+
+        supplier_path = temp_project_root / "50000" / "1-RFQ" / "Supplier RFQ Quotes" / "SupplierY"
+        (supplier_path / "Received" / "2024-04-02").mkdir(parents=True)
+        (supplier_path / "Received" / "2024-04-02" / "quote.pdf").touch()
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "50000")
+
+        # Verify we have both suppliers with correct partner_types
+        assert len(project_data["suppliers"]) == 2
+
+        contractor_docs = [s for s in project_data["suppliers"] if s["supplier_name"] == "ContractorX"]
+        supplier_docs = [s for s in project_data["suppliers"] if s["supplier_name"] == "SupplierY"]
+
+        assert len(contractor_docs) == 1
+        assert contractor_docs[0].get("partner_type") == "Contractor"
+
+        assert len(supplier_docs) == 1
+        assert supplier_docs[0].get("partner_type") == "Supplier"
+
+        # Verify submissions have matching partner_types
+        contractor_submissions = [s for s in project_data["submissions"] if s["supplier_name"] == "ContractorX"]
+        supplier_submissions = [s for s in project_data["submissions"] if s["supplier_name"] == "SupplierY"]
+
+        for sub in contractor_submissions:
+            assert sub.get("partner_type") == "Contractor"
+
+        for sub in supplier_submissions:
+            assert sub.get("partner_type") == "Supplier"
+
+    def test_partner_type_propagated_to_both_sent_and_received(self, temp_project_root, mock_db_manager):
+        """Test that partner_type is propagated to both sent and received submissions."""
+        self.create_contractor_structure(temp_project_root, "12345", "ContractorA")
+
+        config = {"root_path": str(temp_project_root)}
+        crawler = RFQCrawler(config, mock_db_manager, dry_run=True)
+
+        project_data = crawler.process_project_folder(temp_project_root / "12345")
+
+        sent_submissions = [s for s in project_data["submissions"] if s["type"] == "sent"]
+        received_submissions = [s for s in project_data["submissions"] if s["type"] == "received"]
+
+        # Both sent and received should exist and have partner_type='Contractor'
+        assert len(sent_submissions) >= 1
+        assert len(received_submissions) >= 1
+
+        for sub in sent_submissions:
+            assert sub.get("partner_type") == "Contractor"
+
+        for sub in received_submissions:
+            assert sub.get("partner_type") == "Contractor"

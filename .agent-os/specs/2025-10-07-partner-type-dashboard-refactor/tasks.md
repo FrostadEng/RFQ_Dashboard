@@ -17,15 +17,15 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [x] 1.7 Create MongoDB compound index: `project_id` + `partner_type` + `direction` on submissions collection
   - [x] 1.8 Verify all schema tests pass and indexes are created successfully
 
-- [ ] 2. Crawler Logic Enhancement for Partner Type Detection
-  - [ ] 2.1 Write unit tests for path parsing logic to detect "Contractor RFQ Quotes" folder structure
-  - [ ] 2.2 Write unit tests for path parsing logic to detect "Supplier RFQ Quotes" (default) folder structure
-  - [ ] 2.3 Write unit tests to verify partner_type is correctly assigned to supplier documents based on folder path
-  - [ ] 2.4 Write unit tests to verify partner_type is correctly assigned to submission documents based on folder path
-  - [ ] 2.5 Update crawler path parsing logic to detect "Contractor RFQ Quotes" pattern and set partner_type='Contractor'
-  - [ ] 2.6 Update crawler path parsing logic to detect "Supplier RFQ Quotes" (or default RFQ) pattern and set partner_type='Supplier'
-  - [ ] 2.7 Ensure partner_type is applied to both supplier documents and all associated submission documents
-  - [ ] 2.8 Verify all crawler tests pass and partner_type is correctly populated during test scans
+- [x] 2. Crawler Logic Enhancement for Partner Type Detection
+  - [x] 2.1 Write unit tests for path parsing logic to detect "Contractor RFQ Quotes" folder structure
+  - [x] 2.2 Write unit tests for path parsing logic to detect "Supplier RFQ Quotes" (default) folder structure
+  - [x] 2.3 Write unit tests to verify partner_type is correctly assigned to supplier documents based on folder path
+  - [x] 2.4 Write unit tests to verify partner_type is correctly assigned to submission documents based on folder path
+  - [x] 2.5 Update crawler path parsing logic to detect "Contractor RFQ Quotes" pattern and set partner_type='Contractor'
+  - [x] 2.6 Update crawler path parsing logic to detect "Supplier RFQ Quotes" (or default RFQ) pattern and set partner_type='Supplier'
+  - [x] 2.7 Ensure partner_type is applied to both supplier documents and all associated submission documents
+  - [x] 2.8 Verify all crawler tests pass and partner_type is correctly populated during test scans
 
 - [ ] 3. Backend Query Layer and Aggregation Logic
   - [ ] 3.1 Write unit tests for filtering suppliers by partner_type
