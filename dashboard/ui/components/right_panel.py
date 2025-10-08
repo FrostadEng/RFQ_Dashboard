@@ -6,7 +6,10 @@ Contains supplier selection list.
 import streamlit as st
 
 from rfq_tracker.db_manager import DBManager
-from dashboard.data.queries import fetch_supplier_data
+from dashboard.data.queries import (
+    fetch_suppliers_by_partner_type,
+    get_partner_statistics
+)
 
 
 def render_right_panel(right_col, db_manager: DBManager):
@@ -19,15 +22,50 @@ def render_right_panel(right_col, db_manager: DBManager):
     """
     with right_col:
         if st.session_state.selected_project:
-            st.markdown("### 🏢 Suppliers")
+            # Get partner type from session state
+            partner_type_display = st.session_state.get('partner_type', 'Suppliers')
+            partner_type_backend = 'Supplier' if partner_type_display == 'Suppliers' else 'Contractor'
 
-            # Fetch supplier data
+            # Display header with current partner type
+            st.markdown(f"### 🏢 {partner_type_display}")
+
+            # Fetch supplier data filtered by partner type
             with st.spinner("Loading..."):
-                supplier_data = fetch_supplier_data(db_manager, st.session_state.selected_project['project_number'])
+                suppliers = fetch_suppliers_by_partner_type(
+                    db_manager,
+                    st.session_state.selected_project['project_number'],
+                    partner_type_backend
+                )
 
-            if supplier_data:
-                # Create radio buttons for supplier selection
-                supplier_names = [d['supplier']['supplier_name'] for d in supplier_data]
+                # Get partner statistics for inline counts
+                partner_stats = get_partner_statistics(
+                    db_manager,
+                    st.session_state.selected_project['project_number'],
+                    partner_type_backend
+                )
+
+            if suppliers:
+                # Create a dictionary for quick stats lookup
+                stats_dict = {
+                    stat['supplier_name']: stat
+                    for stat in partner_stats
+                }
+
+                # Create formatted radio options with inline sent/received counts
+                supplier_options = []
+                supplier_names = []
+                for supplier in suppliers:
+                    name = supplier['supplier_name']
+                    supplier_names.append(name)
+
+                    # Get stats for this supplier
+                    stats = stats_dict.get(name, {'sent_count': 0, 'received_count': 0})
+                    sent_count = stats['sent_count']
+                    received_count = stats['received_count']
+
+                    # Format: SupplierName [Sent: X, Received: Y]
+                    formatted_option = f"{name} [Sent: {sent_count}, Received: {received_count}]"
+                    supplier_options.append(formatted_option)
 
                 # Find index of currently selected supplier
                 try:
@@ -35,20 +73,24 @@ def render_right_panel(right_col, db_manager: DBManager):
                 except (ValueError, AttributeError):
                     default_index = 0
 
-                selected_supplier = st.radio(
-                    "Select Supplier",
-                    supplier_names,
+                # Display radio buttons with formatted options
+                selected_option = st.radio(
+                    "Select Partner",
+                    supplier_options,
                     index=default_index,
                     label_visibility="collapsed",
                     key="supplier_radio"
                 )
 
+                # Extract supplier name from selected option
+                selected_supplier_name = supplier_names[supplier_options.index(selected_option)]
+
                 # Update session state if selection changed
-                if selected_supplier != st.session_state.selected_supplier:
-                    st.session_state.selected_supplier = selected_supplier
+                if selected_supplier_name != st.session_state.selected_supplier:
+                    st.session_state.selected_supplier = selected_supplier_name
                     st.rerun()
             else:
-                st.caption("_No suppliers found_")
+                st.caption(f"_No {partner_type_display.lower()} found_")
         else:
             st.markdown(
                 """

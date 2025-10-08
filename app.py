@@ -63,6 +63,8 @@ def main():
         st.session_state.preview_file = None
     if 'selected_supplier' not in st.session_state:
         st.session_state.selected_supplier = None
+    if 'partner_type' not in st.session_state:
+        st.session_state.partner_type = 'Suppliers'
 
     # Initialize database connection
     db_manager = initialize_db_manager()

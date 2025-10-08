@@ -45,6 +45,18 @@ def render_left_panel(left_col, db_manager: DBManager, all_projects: List[Dict[s
 
         # Collapsible Filters Section
         with st.expander("🔍 Filters", expanded=False):
+            # Partner Type Filter (Radio Button)
+            partner_type = st.radio(
+                "Partner Type",
+                options=["Suppliers", "Contractors"],
+                index=0 if st.session_state.get('partner_type', 'Suppliers') == 'Suppliers' else 1,
+                key="partner_type_filter",
+                horizontal=True
+            )
+            st.session_state.partner_type = partner_type
+
+            st.divider()
+
             # Search input
             search_term = st.text_input(
                 "Search Project Number",

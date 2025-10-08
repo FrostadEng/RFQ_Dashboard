@@ -27,38 +27,38 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
   - [x] 2.7 Ensure partner_type is applied to both supplier documents and all associated submission documents
   - [x] 2.8 Verify all crawler tests pass and partner_type is correctly populated during test scans
 
-- [ ] 3. Backend Query Layer and Aggregation Logic
-  - [ ] 3.1 Write unit tests for filtering suppliers by partner_type
-  - [ ] 3.2 Write unit tests for filtering submissions by partner_type
-  - [ ] 3.3 Write unit tests for aggregation query computing unique partners contacted (sent count) by partner_type
-  - [ ] 3.4 Write unit tests for aggregation query computing unique partners with responses (received count) by partner_type
-  - [ ] 3.5 Write unit tests for partner statistics aggregation (sent/received counts per partner filtered by partner_type)
-  - [ ] 3.6 Update database query functions to include partner_type filter parameter
-  - [ ] 3.7 Implement aggregation pipeline for project-level statistics (contacted count and response count by partner_type)
-  - [ ] 3.8 Implement aggregation pipeline for partner-level statistics (sent/received counts per partner)
-  - [ ] 3.9 Add backward compatibility logic to handle documents without partner_type field (treat as 'Supplier')
-  - [ ] 3.10 Verify all backend query tests pass with correct filtered results
+- [x] 3. Backend Query Layer and Aggregation Logic
+  - [x] 3.1 Write unit tests for filtering suppliers by partner_type
+  - [x] 3.2 Write unit tests for filtering submissions by partner_type
+  - [x] 3.3 Write unit tests for aggregation query computing unique partners contacted (sent count) by partner_type
+  - [x] 3.4 Write unit tests for aggregation query computing unique partners with responses (received count) by partner_type
+  - [x] 3.5 Write unit tests for partner statistics aggregation (sent/received counts per partner filtered by partner_type)
+  - [x] 3.6 Update database query functions to include partner_type filter parameter
+  - [x] 3.7 Implement aggregation pipeline for project-level statistics (contacted count and response count by partner_type)
+  - [x] 3.8 Implement aggregation pipeline for partner-level statistics (sent/received counts per partner)
+  - [x] 3.9 Add backward compatibility logic to handle documents without partner_type field (treat as 'Supplier')
+  - [x] 3.10 Verify all backend query tests pass with correct filtered results
 
-- [ ] 4. UI Component Implementation and Dashboard Refactoring
-  - [ ] 4.1 Write UI tests for partner type toggle (radio button) in left panel with session state persistence
-  - [ ] 4.2 Write UI tests for project header displaying project number and aggregate statistics
-  - [ ] 4.3 Write UI tests for enhanced partner list showing inline sent/received counts
-  - [ ] 4.4 Write UI tests for simplified partner header (project number removed)
-  - [ ] 4.5 Write UI tests for streamlined event card layout (single-line folder/stats)
-  - [ ] 4.6 Implement partner type radio button filter in left panel (Suppliers/Contractors toggle) with session state
-  - [ ] 4.7 Implement persistent project header component in center panel (project number + aggregate statistics)
-  - [ ] 4.8 Update partner list component in right panel to display inline sent/received counts per partner
-  - [ ] 4.9 Simplify partner header in center panel by removing redundant project number display
-  - [ ] 4.10 Refactor event card layout to single-line format (folder name left-aligned, file/size stats right-aligned)
-  - [ ] 4.11 Connect UI components to backend queries with partner_type filtering
-  - [ ] 4.12 Verify all UI tests pass and components render correctly with filtered data
+- [x] 4. UI Component Implementation and Dashboard Refactoring
+  - [x] 4.1 Write UI tests for partner type toggle (radio button) in left panel with session state persistence
+  - [x] 4.2 Write UI tests for project header displaying project number and aggregate statistics
+  - [x] 4.3 Write UI tests for enhanced partner list showing inline sent/received counts
+  - [x] 4.4 Write UI tests for simplified partner header (project number removed)
+  - [x] 4.5 Write UI tests for streamlined event card layout (single-line folder/stats)
+  - [x] 4.6 Implement partner type radio button filter in left panel (Suppliers/Contractors toggle) with session state
+  - [x] 4.7 Implement persistent project header component in center panel (project number + aggregate statistics)
+  - [x] 4.8 Update partner list component in right panel to display inline sent/received counts per partner
+  - [x] 4.9 Simplify partner header in center panel by removing redundant project number display
+  - [x] 4.10 Refactor event card layout to single-line format (folder name left-aligned, file/size stats right-aligned)
+  - [x] 4.11 Connect UI components to backend queries with partner_type filtering
+  - [x] 4.12 Verify all UI tests pass and components render correctly with filtered data
 
-- [ ] 5. Integration Testing and End-to-End Validation
-  - [ ] 5.1 Write integration test for full crawler-to-UI flow with Contractor RFQ Quotes folder structure
-  - [ ] 5.2 Write integration test for full crawler-to-UI flow with Supplier RFQ Quotes folder structure
-  - [ ] 5.3 Write integration test for partner type toggle switching between Suppliers and Contractors views
-  - [ ] 5.4 Write integration test verifying project-level statistics update correctly when toggle changes
-  - [ ] 5.5 Write integration test verifying partner list updates correctly when toggle changes
-  - [ ] 5.6 Perform manual testing with mock_projects data to verify Contractor partners are detected and displayed
-  - [ ] 5.7 Perform manual testing to verify backward compatibility with existing Supplier data
-  - [ ] 5.8 Verify all integration tests pass and dashboard behavior is correct for both partner types
+- [x] 5. Integration Testing and End-to-End Validation
+  - [x] 5.1 Write integration test for full crawler-to-UI flow with Contractor RFQ Quotes folder structure
+  - [x] 5.2 Write integration test for full crawler-to-UI flow with Supplier RFQ Quotes folder structure
+  - [x] 5.3 Write integration test for partner type toggle switching between Suppliers and Contractors views
+  - [x] 5.4 Write integration test verifying project-level statistics update correctly when toggle changes
+  - [x] 5.5 Write integration test verifying partner list updates correctly when toggle changes
+  - [x] 5.6 Perform manual testing with mock_projects data to verify Contractor partners are detected and displayed
+  - [x] 5.7 Perform manual testing to verify backward compatibility with existing Supplier data
+  - [x] 5.8 Verify all integration tests pass and dashboard behavior is correct for both partner types

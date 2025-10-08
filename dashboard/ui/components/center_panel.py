@@ -8,7 +8,11 @@ import streamlit as st
 from pathlib import Path
 
 from rfq_tracker.db_manager import DBManager
-from dashboard.data.queries import fetch_supplier_data
+from dashboard.data.queries import (
+    fetch_supplier_data,
+    fetch_suppliers_by_partner_type,
+    get_project_statistics
+)
 from dashboard.logic.processing import calculate_supplier_statistics, calculate_folder_statistics, group_events_by_folder_name, build_folder_tree
 from dashboard.styles import get_statistics_badge, format_file_size
 from dashboard.utils.helpers import format_timestamp, create_file_link
@@ -35,9 +39,57 @@ def render_center_panel(center_col, db_manager: DBManager):
         if st.session_state.selected_project:
             project = st.session_state.selected_project
 
-            # Fetch supplier data for the project
+            # Get partner type from session state (convert to singular form for backend queries)
+            partner_type_display = st.session_state.get('partner_type', 'Suppliers')
+            partner_type_backend = 'Supplier' if partner_type_display == 'Suppliers' else 'Contractor'
+
+            # Project Header with Aggregate Statistics (Persistent)
+            st.markdown(f"## Project {project['project_number']}")
+
+            # Fetch and display aggregate statistics based on partner type
+            project_stats = get_project_statistics(db_manager, project['project_number'], partner_type_backend)
+            contacted_count = project_stats.get('contacted_count', 0)
+            response_count = project_stats.get('response_count', 0)
+
+            stats_html = (
+                f"{get_statistics_badge(f'{contacted_count} {partner_type_display} Contacted', '', 'info')} "
+                f"{get_statistics_badge(f'{response_count} Responses Received', '', 'success')}"
+            )
+            st.markdown(stats_html, unsafe_allow_html=True)
+
+            # Display last scanned date
+            if 'last_scanned' in project and project['last_scanned']:
+                formatted_date = format_timestamp(project['last_scanned'])
+                st.caption(f"📅 Last Scanned: {formatted_date}")
+
+            st.divider()
+
+            # Fetch supplier data for the project (filtered by partner type)
             with st.spinner("Loading supplier data..."):
-                supplier_data = fetch_supplier_data(db_manager, project['project_number'])
+                supplier_data_filtered = fetch_suppliers_by_partner_type(
+                    db_manager,
+                    project['project_number'],
+                    partner_type_backend
+                )
+
+            # Get full supplier data with submissions for filtered suppliers
+            supplier_data = []
+            for supplier_info in supplier_data_filtered:
+                supplier_name = supplier_info['supplier_name']
+                # Fetch submissions for this supplier
+                submissions = list(db_manager.db.submissions.find({
+                    "project_number": project['project_number'],
+                    "supplier_name": supplier_name
+                }).sort("date", -1))
+
+                transmissions = [s for s in submissions if s.get('type') == 'sent']
+                receipts = [s for s in submissions if s.get('type') == 'received']
+
+                supplier_data.append({
+                    'supplier': supplier_info,
+                    'transmissions': transmissions,
+                    'receipts': receipts
+                })
 
             # Auto-select first supplier if none selected or current selection invalid
             if supplier_data:
@@ -58,13 +110,8 @@ def render_center_panel(center_col, db_manager: DBManager):
                     transmissions = selected_data['transmissions']
                     receipts = selected_data['receipts']
 
-                    # Header: Project + Supplier
-                    st.markdown(f"## Project {project['project_number']} - {supplier['supplier_name']}")
-
-                    # Display last scanned date
-                    if 'last_scanned' in project and project['last_scanned']:
-                        formatted_date = format_timestamp(project['last_scanned'])
-                        st.caption(f"📅 Last Scanned: {formatted_date}")
+                    # Simplified Header: Supplier Name Only (project number removed - now in persistent header)
+                    st.markdown(f"### {supplier['supplier_name']}")
 
                     # Calculate and display supplier statistics
                     supplier_stats = calculate_supplier_statistics(transmissions, receipts)
@@ -150,12 +197,12 @@ def render_center_panel(center_col, db_manager: DBManager):
                                                 f"{get_statistics_badge('Size', format_file_size(folder_stats['total_size']), 'size')}"
                                             )
 
-                                            # Header bar with title
-                                            st.markdown(f'<div class="event-card-header"><strong>📂 {folder_name}</strong></div>', unsafe_allow_html=True)
-
-                                            # Body with metadata and stats
-                                            st.markdown('<div class="event-card-body">', unsafe_allow_html=True)
-                                            st.markdown(folder_stats_html, unsafe_allow_html=True)
+                                            # Single-line header: folder name (left) + stats (right)
+                                            col_folder, col_stats = st.columns([3, 2])
+                                            with col_folder:
+                                                st.markdown(f'<strong>📂 {folder_name}</strong>', unsafe_allow_html=True)
+                                            with col_stats:
+                                                st.markdown(f'<div style="text-align: right;">{folder_stats_html}</div>', unsafe_allow_html=True)
 
                                             # Display metadata
                                             sent_date = format_timestamp(trans.get('date', 'N/A'))
@@ -284,12 +331,12 @@ def render_center_panel(center_col, db_manager: DBManager):
                                             f"{get_statistics_badge('Size', format_file_size(folder_stats['total_size']), 'size')}"
                                         )
 
-                                        # Header bar with title
-                                        st.markdown(f'<div class="event-card-header"><strong>📂 {folder_name}</strong></div>', unsafe_allow_html=True)
-
-                                        # Body with metadata and stats
-                                        st.markdown('<div class="event-card-body">', unsafe_allow_html=True)
-                                        st.markdown(folder_stats_html, unsafe_allow_html=True)
+                                        # Single-line header: folder name (left) + stats (right)
+                                        col_folder, col_stats = st.columns([3, 2])
+                                        with col_folder:
+                                            st.markdown(f'<strong>📂 {folder_name}</strong>', unsafe_allow_html=True)
+                                        with col_stats:
+                                            st.markdown(f'<div style="text-align: right;">{folder_stats_html}</div>', unsafe_allow_html=True)
 
                                         # Display metadata
                                         received_date = format_timestamp(receipt.get('date', 'N/A'))
