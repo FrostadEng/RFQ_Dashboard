@@ -36,6 +36,16 @@ class DBManager:
         """Ensure all required indexes exist for efficient queries and upserts."""
         self.db.projects.create_index("project_number", unique=True)
         self.db.suppliers.create_index([("project_number", 1), ("supplier_name", 1)], unique=True)
+
+        # partner_type indexes for efficient filtering
+        self.db.suppliers.create_index("partner_type")
+        self.db.submissions.create_index("partner_type")
+
+        # Compound indexes with partner_type for filtered queries
+        self.db.suppliers.create_index([("project_number", 1), ("partner_type", 1)])
+        self.db.submissions.create_index([("project_number", 1), ("partner_type", 1)])
+        self.db.submissions.create_index([("project_number", 1), ("partner_type", 1), ("type", 1)])
+
         # Unified submissions collection with type field
         self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("type", 1)])
         self.db.submissions.create_index([("project_number", 1), ("supplier_name", 1), ("folder_name", 1), ("content_hash", 1)], unique=True)
@@ -61,20 +71,27 @@ class DBManager:
                     upsert=True
                 )
 
-            # Bulk upsert suppliers
+            # Bulk upsert suppliers with partner_type default
             if data["suppliers"]:
-                requests = [
-                    UpdateOne(
-                        {"project_number": s["project_number"], "supplier_name": s["supplier_name"]},
-                        {"$set": s},
-                        upsert=True
-                    ) for s in data["suppliers"]
-                ]
-                self.db.suppliers.bulk_write(requests)
+                for s in data["suppliers"]:
+                    # Ensure partner_type has default value
+                    supplier_doc = s.copy()
+                    if "partner_type" not in supplier_doc:
+                        supplier_doc["partner_type"] = "Supplier"
 
-            # Content-aware versioning for submissions
+                    self.db.suppliers.update_one(
+                        {"project_number": supplier_doc["project_number"], "supplier_name": supplier_doc["supplier_name"]},
+                        {"$set": supplier_doc},
+                        upsert=True
+                    )
+
+            # Content-aware versioning for submissions with partner_type default
             if data["submissions"]:
                 for sub in data["submissions"]:
+                    # Ensure partner_type has default value
+                    if "partner_type" not in sub:
+                        sub["partner_type"] = "Supplier"
+
                     # Check if this exact content already exists
                     existing = self.db.submissions.find_one({
                         "project_number": sub["project_number"],

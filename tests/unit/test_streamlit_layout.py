@@ -19,12 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.modules['streamlit'] = Mock()
 sys.modules['dotenv'] = Mock()
 
-from streamlit_dashboard import (
+from dashboard.logic.processing import (
     filter_projects,
     sort_projects,
-    format_timestamp,
     build_folder_tree,
 )
+from dashboard.utils.helpers import format_timestamp
 
 
 class TestProjectFiltering:

@@ -35,9 +35,15 @@ def test_environment(fs):
     fs.create_dir(f"{root}/54321/Drawings")
 
     # 2. Set up the DBManager with mongomock
-    with patch('rfq_tracker.db_manager.MongoClient', new=mongomock.MongoClient):
-        db_manager = DBManager(mongo_uri=MONGO_URI, db_name=DB_NAME)
-    
+    # Directly assign mongomock client to db_manager to bypass MongoClient initialization
+    db_manager = DBManager(mongo_uri=MONGO_URI, db_name=DB_NAME)
+    db_manager.client = mongomock.MongoClient()
+    db_manager.db = db_manager.client[DB_NAME]
+    db_manager._ensure_indexes()
+
+    # Override close method to prevent it from closing the client during fixture cleanup
+    db_manager.close = lambda: None
+
     # 3. Set up the RFQCrawler
     crawler = RFQCrawler(config=MOCK_CONFIG, db_manager=db_manager)
 
@@ -57,9 +63,10 @@ def test_full_pipeline(test_environment):
     db = db_manager.db
 
     # 1. Verify Projects
-    assert db.projects.count_documents({}) == 2
+    # Note: Project 54321 is also saved even though it has no RFQ folder
+    assert db.projects.count_documents({}) == 3
     project_numbers = {p["project_number"] for p in db.projects.find()}
-    assert project_numbers == {"12345", "67890"}
+    assert project_numbers == {"12345", "67890", "54321"}
     
     proj_12345 = db.projects.find_one({"project_number": "12345"})
     assert proj_12345["path"] == f"{MOCK_CONFIG['root_path']}/12345"

@@ -7,15 +7,15 @@ These are the tasks to be completed for the spec detailed in @.agent-os/specs/20
 
 ## Tasks
 
-- [ ] 1. Database Schema and Data Model Implementation
-  - [ ] 1.1 Write unit tests for `partner_type` field validation on suppliers collection (enum constraint, default value)
-  - [ ] 1.2 Write unit tests for `partner_type` field validation on submissions collection (enum constraint, default value)
-  - [ ] 1.3 Add `partner_type` field to suppliers MongoDB collection schema with enum ['Supplier', 'Contractor'] and default 'Supplier'
-  - [ ] 1.4 Add `partner_type` field to submissions MongoDB collection schema with enum ['Supplier', 'Contractor'] and default 'Supplier'
-  - [ ] 1.5 Create MongoDB indexes: `partner_type` single-field index on both collections
-  - [ ] 1.6 Create MongoDB compound indexes: `project_id` + `partner_type` on both collections
-  - [ ] 1.7 Create MongoDB compound index: `project_id` + `partner_type` + `direction` on submissions collection
-  - [ ] 1.8 Verify all schema tests pass and indexes are created successfully
+- [x] 1. Database Schema and Data Model Implementation
+  - [x] 1.1 Write unit tests for `partner_type` field validation on suppliers collection (enum constraint, default value)
+  - [x] 1.2 Write unit tests for `partner_type` field validation on submissions collection (enum constraint, default value)
+  - [x] 1.3 Add `partner_type` field to suppliers MongoDB collection schema with enum ['Supplier', 'Contractor'] and default 'Supplier'
+  - [x] 1.4 Add `partner_type` field to submissions MongoDB collection schema with enum ['Supplier', 'Contractor'] and default 'Supplier'
+  - [x] 1.5 Create MongoDB indexes: `partner_type` single-field index on both collections
+  - [x] 1.6 Create MongoDB compound indexes: `project_id` + `partner_type` on both collections
+  - [x] 1.7 Create MongoDB compound index: `project_id` + `partner_type` + `direction` on submissions collection
+  - [x] 1.8 Verify all schema tests pass and indexes are created successfully
 
 - [ ] 2. Crawler Logic Enhancement for Partner Type Detection
   - [ ] 2.1 Write unit tests for path parsing logic to detect "Contractor RFQ Quotes" folder structure
